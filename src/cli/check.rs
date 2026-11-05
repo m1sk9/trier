@@ -2,7 +2,8 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use crate::browser::builtin_bundle_id;
-use crate::config::{Config, ConfigError, Rule};
+use crate::cli::report_config_error;
+use crate::config::{Config, Rule};
 use crate::pattern::covers;
 
 /// Loads and validates the config at `path`, reporting to `out` / `err`.
@@ -34,20 +35,6 @@ pub fn run(path: &Path, out: &mut dyn Write, err: &mut dyn Write) -> io::Result<
     }
     writeln!(out, "OK: {}", path.display())?;
     Ok(true)
-}
-
-/// Writes one `error:` line per problem in `e`.
-pub fn report_config_error(path: &Path, e: &ConfigError, err: &mut dyn Write) -> io::Result<()> {
-    match e {
-        ConfigError::Invalid(violations) => {
-            for v in violations {
-                writeln!(err, "error: {}: {v}", path.display())?;
-            }
-            Ok(())
-        }
-        ConfigError::Read { .. } => writeln!(err, "error: {e}"),
-        ConfigError::Parse(_) => writeln!(err, "error: {}: {e}", path.display()),
-    }
 }
 
 /// `(shadowed, by)` index pairs: rule `shadowed` can never match because the
@@ -84,13 +71,7 @@ mod tests {
     }
 
     fn write_config(name: &str, content: &str) -> PathBuf {
-        // Not `std::env::temp_dir()`: it reads TMPDIR at runtime, racing with
-        // the env-mutating tests in `paths`.
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/tmp/check");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join(name);
-        std::fs::write(&path, content).unwrap();
-        path
+        crate::test_support::temp_file("check", name, content)
     }
 
     fn check(path: &Path) -> (bool, String, String) {

@@ -17,12 +17,8 @@ pub struct State {
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
-    #[error("failed to read {}", path.display())]
-    Read {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
+    #[error("failed to read {}: {source}", path.display())]
+    Read { path: PathBuf, source: io::Error },
     #[error("failed to parse {}: {source}", path.display())]
     Parse {
         path: PathBuf,
@@ -53,15 +49,10 @@ impl State {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
 
     fn temp_file(name: &str, content: &str) -> PathBuf {
-        // Not `std::env::temp_dir()`: it reads TMPDIR at runtime, racing with
-        // the env-mutating tests in `paths`.
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/tmp/state");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join(name);
-        std::fs::write(&path, content).unwrap();
-        path
+        test_support::temp_file("state", name, content)
     }
 
     #[test]
@@ -97,5 +88,20 @@ mod tests {
     fn malformed_file_is_an_error() {
         let path = temp_file("broken.toml", "previous_default_browser_bundle_id = 1\n");
         assert!(matches!(State::load(&path), Err(StateError::Parse { .. })));
+    }
+
+    #[test]
+    fn read_error_message_includes_the_cause() {
+        let dir = test_support::temp_dir("state/unreadable");
+        let err = State::load(&dir).unwrap_err();
+        assert!(matches!(err, StateError::Read { .. }));
+        let prefix = format!("failed to read {}: ", dir.display());
+        let message = err.to_string();
+        assert!(
+            message
+                .strip_prefix(&prefix)
+                .is_some_and(|cause| !cause.is_empty()),
+            "{message}"
+        );
     }
 }

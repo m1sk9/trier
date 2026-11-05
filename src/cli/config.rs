@@ -46,10 +46,8 @@ mod tests {
     use super::*;
 
     fn temp_path(name: &str) -> PathBuf {
-        // Not `std::env::temp_dir()`: it reads TMPDIR at runtime, racing with
-        // the env-mutating tests in `paths`.
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("target/tmp/init-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::test_support::temp_dir(&format!("init-{name}"));
+        std::fs::remove_dir_all(&dir).unwrap();
         dir.join("nested/trier/config.toml")
     }
 
