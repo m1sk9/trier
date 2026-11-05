@@ -5,9 +5,7 @@
 [![MIT License](https://img.shields.io/github/license/m1sk9/trier?color=%239944ee)](https://github.com/m1sk9/trier/blob/main/LICENSE)
 [![codecov](https://codecov.io/github/m1sk9/trier/graph/badge.svg?token=QA075J11S8)](https://codecov.io/github/m1sk9/trier)
 
-Control Which Browser Opens Based on the URL.
-
----
+Open each URL in the browser its rule picks.
 
 **trier** opens each link in the browser its rules pick. It registers itself as the macOS default browser, matches every clicked URL against host rules in a TOML file, and hands the URL to the chosen browser.
 
@@ -106,13 +104,13 @@ Only `http` and `https` URLs are routed by rules. `trier explain <URL>` shows th
 
 A pattern is `host[/path]`:
 
-| Pattern                                       | Matches                          | Does not match     |
-| --------------------------------------------- | -------------------------------- | ------------------ |
-| `github.com`                                  | `github.com` with any path       | `gist.github.com`  |
-| `github.com/**`                               | same as `github.com`             |                    |
+| Pattern                                       | Matches                          | Does not match       |
+| --------------------------------------------- | -------------------------------- | -------------------- |
+| `github.com`                                  | `github.com` with any path       | `gist.github.com`    |
+| `github.com/**`                               | same as `github.com`             |                      |
 | `github.com/ab-company/**`                    | `/ab-company`, `/ab-company/app` | `/ab-company-labs/x` |
 | `github.com/ab-company`                       | `/ab-company`, `/ab-company/`    | `/ab-company/app`    |
-| `github.com` with `include_subdomains = true` | `github.com`, `gist.github.com`  | `evilgithub.com`   |
+| `github.com` with `include_subdomains = true` | `github.com`, `gist.github.com`  | `evilgithub.com`     |
 
 - No scheme and no port; ports, queries and fragments of the URL are ignored.
 - Hosts are case-insensitive; `www.` has no special meaning (write `www.example.com` separately if you need it).
@@ -209,18 +207,18 @@ warning: rules[1] never matches: every host is already matched by rules[0]
 
 ## Commands
 
-| Command       | Example                                             | What it does                                                                              |
-| ------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `check`       | `trier check`                                       | Validate the config; also warns about shadowed rules and browsers that are not installed. |
-| `explain`     | `trier explain https://github.com/ab-company/trier`  | Show the matched rule (or fallback), browser, bundle id and app path.                     |
-| `open`        | `trier open https://example.com https://github.com` | Open URLs in their decided browsers.                                                      |
-| `browsers`    | `trier browsers`                                    | List built-in and custom browsers and where they are installed. Works without a config.   |
-| `register`    | `trier register`                                    | Generate `~/Applications/Trier.app` and make it the default browser.                      |
-| `unregister`  | `trier unregister`                                  | Restore the previous default browser and remove `Trier.app`.                              |
-| `status`      | `trier status`                                      | Show the config, the bundle, the registered version and the current default browser.      |
+| Command       | Example                                             | What it does                                                                                     |
+| ------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `check`       | `trier check`                                       | Validate the config; also warns about shadowed rules and browsers that are not installed.        |
+| `explain`     | `trier explain https://github.com/ab-company/trier` | Show the matched rule (or fallback), browser, bundle id and app path.                            |
+| `open`        | `trier open https://example.com https://github.com` | Open URLs in their decided browsers.                                                             |
+| `browsers`    | `trier browsers`                                    | List built-in and custom browsers and where they are installed. Works without a config.          |
+| `register`    | `trier register`                                    | Generate `~/Applications/Trier.app` and make it the default browser.                             |
+| `unregister`  | `trier unregister`                                  | Restore the previous default browser and remove `Trier.app`.                                     |
+| `status`      | `trier status`                                      | Show the config, the bundle, the registered version and the current default browser.             |
 | `skill`       | `trier skill`                                       | Install usage notes for LLM coding agents (`--agent claude\|agents`, `--path <DIR>`, `--force`). |
-| `config path` | `trier config path`                                 | Print the config file path in effect.                                                     |
-| `config init` | `trier config init`                                 | Write the example config there (`--force` to overwrite).                                  |
+| `config path` | `trier config path`                                 | Print the config file path in effect.                                                            |
+| `config init` | `trier config init`                                 | Write the example config there (`--force` to overwrite).                                         |
 
 Every command accepts `--config <PATH>`.
 
@@ -228,11 +226,11 @@ Every command accepts `--config <PATH>`.
 
 `trier skill` writes a short guide to trier's config and commands as an [Agent Skills](https://agentskills.io) `SKILL.md`, so coding agents can edit your config correctly:
 
-| Command                             | Writes to                                                         |
-| ----------------------------------- | ----------------------------------------------------------------- |
-| `trier skill`                       | `~/.claude/skills/trier/SKILL.md` (`$CLAUDE_CONFIG_DIR` if set)   |
-| `trier skill --agent agents`        | `~/.agents/skills/trier/SKILL.md` (Codex and others)              |
-| `trier skill --path <DIR>`          | `<DIR>/SKILL.md`, for any agent that reads skills from elsewhere  |
+| Command                      | Writes to                                                        |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `trier skill`                | `~/.claude/skills/trier/SKILL.md` (`$CLAUDE_CONFIG_DIR` if set)  |
+| `trier skill --agent agents` | `~/.agents/skills/trier/SKILL.md` (Codex and others)             |
+| `trier skill --path <DIR>`   | `<DIR>/SKILL.md`, for any agent that reads skills from elsewhere |
 
 The skill is embedded in the binary, so it matches the installed version; run `trier skill --force` after an upgrade to refresh it. `trier --help` lists them all.
 
