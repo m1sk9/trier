@@ -21,6 +21,11 @@ struct Args {
 enum Command {
     /// Validate the config file.
     Check,
+    /// Show which browser a URL would open in, and why.
+    Explain {
+        /// The URL to resolve.
+        url: String,
+    },
     /// Manage the config file.
     Config {
         #[command(subcommand)]
@@ -51,11 +56,17 @@ fn main() -> anyhow::Result<ExitCode> {
                 &mut std::io::stdout().lock(),
                 &mut std::io::stderr().lock(),
             )?;
-            Ok(if ok {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            })
+            Ok(exit_code(ok))
+        }
+        Command::Explain { url } => {
+            let ok = cli::explain::run(
+                &url,
+                &config_path,
+                paths::state_file(),
+                &mut std::io::stdout().lock(),
+                &mut std::io::stderr().lock(),
+            )?;
+            Ok(exit_code(ok))
         }
         Command::Config {
             command: ConfigCommand::Path,
@@ -70,5 +81,13 @@ fn main() -> anyhow::Result<ExitCode> {
             println!("Wrote {}", config_path.display());
             Ok(ExitCode::SUCCESS)
         }
+    }
+}
+
+fn exit_code(ok: bool) -> ExitCode {
+    if ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }

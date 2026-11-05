@@ -40,6 +40,10 @@ pub fn log_file() -> Result<PathBuf, PathsError> {
     Ok(state_dir()?.join("trier.log"))
 }
 
+pub fn state_file() -> Result<PathBuf, PathsError> {
+    Ok(state_dir()?.join("state.toml"))
+}
+
 fn base_dir(
     xdg_var: &'static str,
     home_fallback: &str,
@@ -201,6 +205,15 @@ mod tests {
     fn log_file_lives_in_state_dir() {
         let _env = EnvGuard::new(&[("XDG_STATE_HOME", "/xdg/state")]);
         assert_eq!(log_file(), Ok(PathBuf::from("/xdg/state/trier/trier.log")));
+    }
+
+    #[test]
+    fn state_file_lives_in_state_dir() {
+        let _env = EnvGuard::new(&[("XDG_STATE_HOME", "/xdg/state")]);
+        assert_eq!(
+            state_file(),
+            Ok(PathBuf::from("/xdg/state/trier/state.toml"))
+        );
     }
 
     #[test]
