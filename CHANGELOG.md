@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/m1sk9/trier/compare/v0.1.0...v0.1.1) (2026-11-05)
+
+
+### CI
+
+* tag releases as vX.Y.Z without the package name ([#16](https://github.com/m1sk9/trier/issues/16)) ([525a4e9](https://github.com/m1sk9/trier/commit/525a4e986c976fb4a73f1939c506a34e17ce8acc))
+
 ## 0.1.0 (2026-11-05)
 
 
