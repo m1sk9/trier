@@ -1,6 +1,6 @@
 [package]
 name = "trier"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 description = "Route URLs to the right browser on macOS based on host rules."
 license = "MIT"
