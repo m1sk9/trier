@@ -1,20 +1,14 @@
-use std::io::{self, Write};
 use std::path::Path;
 
 use crate::browser::Origin;
-use crate::cli::{AppLookup, load_config};
+use crate::cli::{AppLookup, Report, load_config};
 
 /// Prints every known browser: name, origin, bundle id and install path.
 ///
 /// Returns whether the config could be loaded.
-pub fn run(
-    config_path: &Path,
-    lookup: AppLookup,
-    out: &mut dyn Write,
-    err: &mut dyn Write,
-) -> io::Result<bool> {
-    let Some(config) = load_config(config_path, err)? else {
-        return Ok(false);
+pub fn run(config_path: &Path, lookup: AppLookup, report: &mut Report) -> bool {
+    let Some(config) = load_config(config_path, report) else {
+        return false;
     };
     let registry = config.registry();
     let rows: Vec<[String; 4]> = registry
@@ -45,18 +39,18 @@ pub fn run(
         }
     }
     for [name, origin, bundle_id, app] in std::iter::once(&header).chain(&rows) {
-        writeln!(
-            out,
+        report.out(format_args!(
             "{name:<w0$}  {origin:<w1$}  {bundle_id:<w2$}  {app}",
             w0 = widths[0],
             w1 = widths[1],
-            w2 = widths[2],
-        )?;
+            w2 = widths[2]
+        ));
     }
-    Ok(true)
+    true
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::path::PathBuf;
 
@@ -64,13 +58,9 @@ mod tests {
     use crate::test_support::{lookup_installed, temp_file};
 
     fn browsers(config: &Path, lookup: AppLookup) -> (bool, String, String) {
-        let (mut out, mut err) = (Vec::new(), Vec::new());
-        let ok = run(config, lookup, &mut out, &mut err).unwrap();
-        (
-            ok,
-            String::from_utf8(out).unwrap(),
-            String::from_utf8(err).unwrap(),
-        )
+        let mut report = Report::default();
+        let ok = run(config, lookup, &mut report);
+        (ok, report.stdout, report.stderr)
     }
 
     /// `name` must be unique per test: tests run in parallel and would

@@ -1,44 +1,36 @@
-use std::io::{self, Write};
 use std::path::Path;
 
 use crate::browser::{BrowserName, builtin_bundle_id};
-use crate::cli::{AppLookup, load_config};
+use crate::cli::{AppLookup, Report, load_config};
 use crate::config::{Config, Rule};
 use crate::pattern::covers;
 
 /// Loads and validates the config at `path`, reporting to `out` / `err`.
 ///
 /// Returns whether the config is valid; warnings do not make it invalid.
-pub fn run(
-    path: &Path,
-    lookup: AppLookup,
-    out: &mut dyn Write,
-    err: &mut dyn Write,
-) -> io::Result<bool> {
-    let Some(config) = load_config(path, err)? else {
-        return Ok(false);
+pub fn run(path: &Path, lookup: AppLookup, report: &mut Report) -> bool {
+    let Some(config) = load_config(path, report) else {
+        return false;
     };
 
     for (name, custom) in &config.browsers {
         if let Some(builtin) = builtin_bundle_id(name) {
-            writeln!(
-                out,
+            report.out(format_args!(
                 "info: [browsers.\"{name}\"] overrides the built-in `{name}` ({builtin} -> {})",
                 custom.bundle_id
-            )?;
+            ));
         }
     }
     for (shadowed, by) in shadowed_rules(&config.rules) {
-        writeln!(
-            out,
+        report.out(format_args!(
             "warning: rules[{shadowed}] never matches: every host is already matched by rules[{by}]"
-        )?;
+        ));
     }
     for line in missing_browsers(&config, lookup) {
-        writeln!(out, "{line}")?;
+        report.out(line);
     }
-    writeln!(out, "OK: {}", path.display())?;
-    Ok(true)
+    report.out(format_args!("OK: {}", path.display()));
+    true
 }
 
 /// One warning per referenced browser whose app is not installed.
@@ -66,19 +58,17 @@ fn missing_browsers(config: &Config, lookup: AppLookup) -> Vec<String> {
     }
 
     let registry = config.registry();
-    let mut warnings = Vec::new();
-    for (name, locations) in references {
-        let Some(bundle_id) = registry.resolve(name) else {
-            continue;
-        };
-        if lookup(bundle_id).is_none() {
-            warnings.push(format!(
+    references
+        .into_iter()
+        .filter_map(|(name, locations)| registry.resolve(name).map(|id| (name, id, locations)))
+        .filter(|(_, bundle_id, _)| lookup(bundle_id).is_none())
+        .map(|(name, bundle_id, locations)| {
+            format!(
                 "warning: browser `{name}` ({bundle_id}) is not installed (used by {})",
                 locations.join(", ")
-            ));
-        }
-    }
-    warnings
+            )
+        })
+        .collect()
 }
 
 /// `(shadowed, by)` index pairs: rule `shadowed` can never match because the
@@ -105,6 +95,7 @@ fn shadowed_rules(rules: &[Rule]) -> Vec<(usize, usize)> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::path::PathBuf;
 
@@ -120,13 +111,9 @@ mod tests {
     }
 
     fn check(path: &Path) -> (bool, String, String) {
-        let (mut out, mut err) = (Vec::new(), Vec::new());
-        let ok = run(path, &all_installed, &mut out, &mut err).unwrap();
-        (
-            ok,
-            String::from_utf8(out).unwrap(),
-            String::from_utf8(err).unwrap(),
-        )
+        let mut report = Report::default();
+        let ok = run(path, &all_installed, &mut report);
+        (ok, report.stdout, report.stderr)
     }
 
     #[test]
@@ -233,9 +220,9 @@ mod tests {
     }
 
     fn check_with(path: &Path, lookup: AppLookup) -> (bool, String) {
-        let (mut out, mut err) = (Vec::new(), Vec::new());
-        let ok = run(path, lookup, &mut out, &mut err).unwrap();
-        (ok, String::from_utf8(out).unwrap())
+        let mut report = Report::default();
+        let ok = run(path, lookup, &mut report);
+        (ok, report.stdout)
     }
 
     const REFERENCES: &str = "version = 1\n\

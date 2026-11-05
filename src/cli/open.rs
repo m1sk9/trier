@@ -1,10 +1,9 @@
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use url::Url;
 
 use crate::browser::BundleId;
-use crate::cli::{UrlResolver, load_config};
+use crate::cli::{Report, UrlResolver, load_config};
 use crate::macos::MacosError;
 use crate::paths::PathsError;
 
@@ -23,19 +22,18 @@ pub fn run(
     config_path: &Path,
     state_path: Result<PathBuf, PathsError>,
     opener: Opener,
-    out: &mut dyn Write,
-    err: &mut dyn Write,
-) -> io::Result<bool> {
-    let Some(config) = load_config(config_path, err)? else {
-        return Ok(false);
+    report: &mut Report,
+) -> bool {
+    let Some(config) = load_config(config_path, report) else {
+        return false;
     };
     let mut resolver = UrlResolver::new(&config, state_path);
     let mut all_ok = true;
     for input in inputs {
-        let decision = match resolver.resolve(input, err)? {
+        let decision = match resolver.resolve(input, report) {
             Ok(decision) => decision,
             Err(message) => {
-                writeln!(err, "error: {input}: {message}")?;
+                report.err(format_args!("error: {input}: {message}"));
                 all_ok = false;
                 continue;
             }
@@ -45,21 +43,21 @@ pub fn run(
             .as_ref()
             .map_or_else(|| "recorded system default".to_owned(), ToString::to_string);
         match opener(&decision.bundle_id, &decision.url) {
-            Ok(()) => writeln!(
-                out,
+            Ok(()) => report.out(format_args!(
                 "{} -> {browser} ({})",
                 decision.url, decision.bundle_id
-            )?,
+            )),
             Err(e) => {
-                writeln!(err, "error: {input}: {e}")?;
+                report.err(format_args!("error: {input}: {e}"));
                 all_ok = false;
             }
         }
     }
-    Ok(all_ok)
+    all_ok
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::test_support::temp_file;
@@ -85,22 +83,15 @@ mod tests {
             Ok(())
         };
         let inputs: Vec<String> = inputs.iter().map(|s| (*s).to_owned()).collect();
-        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let mut report = Report::default();
         let ok = run(
             &inputs,
             config,
             Ok(state.to_owned()),
             &mut opener,
-            &mut out,
-            &mut err,
-        )
-        .unwrap();
-        (
-            ok,
-            launched,
-            String::from_utf8(out).unwrap(),
-            String::from_utf8(err).unwrap(),
-        )
+            &mut report,
+        );
+        (ok, launched, report.stdout, report.stderr)
     }
 
     #[test]

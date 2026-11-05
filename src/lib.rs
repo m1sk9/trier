@@ -12,4 +12,5 @@ pub mod pattern;
 pub mod resolve;
 pub mod state;
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod test_support;

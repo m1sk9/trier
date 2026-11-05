@@ -1,7 +1,6 @@
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use crate::cli::{AppLookup, UrlResolver, load_config};
+use crate::cli::{AppLookup, Report, UrlResolver, load_config};
 use crate::paths::PathsError;
 
 /// Prints which browser `input` would open in, why, and where that app is.
@@ -12,29 +11,29 @@ pub fn run(
     config_path: &Path,
     state_path: Result<PathBuf, PathsError>,
     lookup: AppLookup,
-    out: &mut dyn Write,
-    err: &mut dyn Write,
-) -> io::Result<bool> {
-    let Some(config) = load_config(config_path, err)? else {
-        return Ok(false);
+    report: &mut Report,
+) -> bool {
+    let Some(config) = load_config(config_path, report) else {
+        return false;
     };
-    match UrlResolver::new(&config, state_path).resolve(input, err)? {
+    match UrlResolver::new(&config, state_path).resolve(input, report) {
         Ok(decision) => {
-            writeln!(out, "{decision}")?;
+            report.out(&decision);
             match lookup(&decision.bundle_id) {
-                Some(path) => writeln!(out, "app:       {}", path.display())?,
-                None => writeln!(out, "app:       not installed")?,
+                Some(path) => report.out(format_args!("app:       {}", path.display())),
+                None => report.out(format_args!("app:       not installed")),
             }
-            Ok(true)
+            true
         }
         Err(message) => {
-            writeln!(err, "error: {message}")?;
-            Ok(false)
+            report.err(format_args!("error: {message}"));
+            false
         }
     }
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::path::PathBuf;
 
@@ -59,21 +58,9 @@ mod tests {
         state: &Path,
         lookup: AppLookup,
     ) -> (bool, String, String) {
-        let (mut out, mut err) = (Vec::new(), Vec::new());
-        let ok = run(
-            url,
-            config,
-            Ok(state.to_owned()),
-            lookup,
-            &mut out,
-            &mut err,
-        )
-        .unwrap();
-        (
-            ok,
-            String::from_utf8(out).unwrap(),
-            String::from_utf8(err).unwrap(),
-        )
+        let mut report = Report::default();
+        let ok = run(url, config, Ok(state.to_owned()), lookup, &mut report);
+        (ok, report.stdout, report.stderr)
     }
 
     const NO_STATE: &str = "/nonexistent/trier/state.toml";
@@ -170,7 +157,7 @@ mod tests {
 
     #[test]
     fn unlocatable_state_dir_does_not_block_a_rule() {
-        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let mut report = Report::default();
         let no_home = Err(PathsError::NoHome {
             what: "state",
             xdg_var: "XDG_STATE_HOME",
@@ -180,17 +167,15 @@ mod tests {
             &example_path(),
             no_home,
             &lookup_installed(&[]),
-            &mut out,
-            &mut err,
-        )
-        .unwrap();
+            &mut report,
+        );
         assert!(ok);
     }
 
     #[test]
     fn unlocatable_state_dir_is_a_warning_when_the_fallback_is_needed() {
         let config = temp_file("no-default-no-home.toml", "version = 1\n");
-        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let mut report = Report::default();
         let no_home = Err(PathsError::NoHome {
             what: "state",
             xdg_var: "XDG_STATE_HOME",
@@ -200,11 +185,9 @@ mod tests {
             &config,
             no_home,
             &lookup_installed(&[]),
-            &mut out,
-            &mut err,
-        )
-        .unwrap();
-        let err = String::from_utf8(err).unwrap();
+            &mut report,
+        );
+        let err = report.stderr;
         assert!(!ok);
         assert!(
             err.contains(
