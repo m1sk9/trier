@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn opens_each_url_in_its_decided_browser() {
         let (ok, launched, out, err) = open(
-            &["https://github.com/mk-system/trier", "https://example.com"],
+            &["https://github.com/ab-company/trier", "https://example.com"],
             &example_path(),
             Path::new(NO_STATE),
         );
@@ -100,13 +100,13 @@ mod tests {
         assert_eq!(
             launched,
             [
-                "org.mozilla.firefoxdeveloperedition https://github.com/mk-system/trier",
+                "org.mozilla.firefoxdeveloperedition https://github.com/ab-company/trier",
                 "com.apple.Safari https://example.com/",
             ]
         );
         assert_eq!(
             out,
-            "https://github.com/mk-system/trier -> firefox@developer-edition (org.mozilla.firefoxdeveloperedition)\n\
+            "https://github.com/ab-company/trier -> firefox@developer-edition (org.mozilla.firefoxdeveloperedition)\n\
              https://example.com/ -> safari (com.apple.Safari)\n"
         );
     }

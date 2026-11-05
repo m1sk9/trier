@@ -34,14 +34,14 @@ bundle_id = "org.mozilla.firefoxdeveloperedition"
 #                       - no scheme, no port; the host is case-insensitive
 #                       - IPv6 literals are written in brackets: `[::1]`
 #                       - `github.com` and `github.com/**` match every path
-#                       - `github.com/mk-system` matches only that exact path
-#                       - `github.com/mk-system/**` matches it and everything below
+#                       - `github.com/ab-company` matches only that exact path
+#                       - `github.com/ab-company/**` matches it and everything below
 #                       - `**` is allowed only as the last segment; `*` is reserved
 # browser:            Required. A built-in name or a name defined under [browsers].
 # include_subdomains: Optional, default false. When true, `github.com` also
 #                     matches `gist.github.com` (but never `evilgithub.com`).
 [[rules]]
-hosts = ["github.com/mk-system/**"]
+hosts = ["github.com/ab-company/**"]
 browser = "firefox@developer-edition"
 
 [[rules]]

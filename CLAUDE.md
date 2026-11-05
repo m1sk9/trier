@@ -23,7 +23,7 @@ RUSTFLAGS='--cfg coverage_nightly' cargo +nightly check --all-targets   # the fe
 
 # Try it without touching the system
 cargo run -- check --config config/config.toml.example
-cargo run -- explain https://github.com/mk-system/trier --config config/config.toml.example
+cargo run -- explain https://github.com/ab-company/trier --config config/config.toml.example
 ```
 
 `cargo run -- register` / `unregister` change the real default browser and write `~/Applications/Trier.app`; run them only when you mean to. Toolchain pinned to stable via `rust-toolchain.toml`. Edition 2024. The crate refuses to compile on anything but macOS.

@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn routes_every_url_in_one_event() {
         let r = run(
-            &["https://github.com/mk-system/trier", "https://example.com/"],
+            &["https://github.com/ab-company/trier", "https://example.com/"],
             &example_path(),
             Path::new(NO_STATE),
         );
@@ -220,7 +220,7 @@ mod tests {
         assert_eq!(
             r.launched,
             [
-                "org.mozilla.firefoxdeveloperedition https://github.com/mk-system/trier",
+                "org.mozilla.firefoxdeveloperedition https://github.com/ab-company/trier",
                 "com.apple.Safari https://example.com/",
             ]
         );
@@ -451,14 +451,14 @@ mod tests {
     #[test]
     fn each_routing_decision_is_logged_with_its_reason() {
         let r = run(
-            &["https://github.com/mk-system/trier"],
+            &["https://github.com/ab-company/trier"],
             &example_path(),
             Path::new(NO_STATE),
         );
         assert_eq!(
             r.logs,
             [
-                "INFO https://github.com/mk-system/trier -> firefox@developer-edition (org.mozilla.firefoxdeveloperedition) by rules[0] (github.com/mk-system/**)"
+                "INFO https://github.com/ab-company/trier -> firefox@developer-edition (org.mozilla.firefoxdeveloperedition) by rules[0] (github.com/ab-company/**)"
             ]
         );
     }

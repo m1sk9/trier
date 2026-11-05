@@ -1,14 +1,43 @@
 # trier
 
-trier opens each link in the browser its rules pick. It registers itself as the macOS default browser, matches every clicked URL against host rules in a TOML file, and hands the URL to the chosen browser.
+[![CI](https://github.com/m1sk9/trier/actions/workflows/ci.yaml/badge.svg)](https://github.com/m1sk9/trier/actions/workflows/ci.yaml)
+[![Release Trier](https://github.com/m1sk9/trier/actions/workflows/release.yaml/badge.svg)](https://github.com/m1sk9/trier/actions/workflows/release.yaml)
+[![MIT License](https://img.shields.io/github/license/m1sk9/trier?color=%239944ee)](https://github.com/m1sk9/trier/blob/main/LICENSE)
+[![codecov](https://codecov.io/github/m1sk9/trier/graph/badge.svg?token=QA075J11S8)](https://codecov.io/github/m1sk9/trier)
 
-macOS on Apple silicon (arm64) only. There is no GUI: trier is a command-line tool plus a small background app it generates for itself.
+Control Which Browser Opens Based on the URL.
+
+---
+
+**trier** opens each link in the browser its rules pick. It registers itself as the macOS default browser, matches every clicked URL against host rules in a TOML file, and hands the URL to the chosen browser.
+
+macOS on Apple silicon (arm64) only.
 
 ## Install
 
-```sh
-brew install m1sk9/tap/trier
+### Homebrew
 
+```sh
+brew tap m1sk9/tap
+brew install m1sk9/tap/trier
+```
+
+### Build from source
+
+```sh
+cargo install --git https://github.com/m1sk9/trier
+
+# -- or --
+git clone https://github.com/m1sk9/trier.git
+cd trier
+cargo build --release
+```
+
+A binary built this way is at `target/release/trier`; put it on your `PATH` (or run it by that path) for the steps below.
+
+### Setup
+
+```sh
 trier config init     # write an example config to ~/.config/trier/config.toml
 $EDITOR "$(trier config path)"
 trier check           # validate it
@@ -16,8 +45,6 @@ trier register        # make trier the default browser
 ```
 
 `trier register` asks macOS to switch the default browser; macOS may show a confirmation dialog. Run it again after every upgrade (see [Upgrading](#upgrading)).
-
-To build from source instead: `cargo install --git https://github.com/m1sk9/trier`.
 
 ## Configuration
 
@@ -38,7 +65,7 @@ default_browser = "safari"
 bundle_id = "org.mozilla.firefoxdeveloperedition"
 
 [[rules]]
-hosts = ["github.com/mk-system/**"]
+hosts = ["github.com/ab-company/**"]
 browser = "firefox@developer-edition"
 
 [[rules]]
@@ -83,15 +110,15 @@ A pattern is `host[/path]`:
 | --------------------------------------------- | -------------------------------- | ------------------ |
 | `github.com`                                  | `github.com` with any path       | `gist.github.com`  |
 | `github.com/**`                               | same as `github.com`             |                    |
-| `github.com/mk-system/**`                     | `/mk-system`, `/mk-system/trier` | `/mk-systems/x`    |
-| `github.com/mk-system`                        | `/mk-system`, `/mk-system/`      | `/mk-system/trier` |
+| `github.com/ab-company/**`                    | `/ab-company`, `/ab-company/app` | `/ab-company-labs/x` |
+| `github.com/ab-company`                       | `/ab-company`, `/ab-company/`    | `/ab-company/app`    |
 | `github.com` with `include_subdomains = true` | `github.com`, `gist.github.com`  | `evilgithub.com`   |
 
 - No scheme and no port; ports, queries and fragments of the URL are ignored.
 - Hosts are case-insensitive; `www.` has no special meaning (write `www.example.com` separately if you need it).
 - `**` is allowed only as the last path segment; `*` is reserved and rejected.
 - Patterns are normalized like URLs: international domain names may be written as is, IPv6 addresses go in brackets (`[::1]`), `127.1` means `127.0.0.1`, and a trailing dot is ignored.
-- Paths are compared segment by segment, without percent-decoding.
+- Paths are compared segment by segment, case-sensitively and without percent-decoding: `github.com/ab-company/**` does not match `github.com/AB-Company/app`.
 - `include_subdomains` has no effect on IP addresses.
 
 ### Browsers
@@ -106,12 +133,86 @@ Any other app needs a `[browsers]` entry with its bundle identifier. `trier brow
 mdls -name kMDItemCFBundleIdentifier -raw /Applications/Example.app
 ```
 
+### Recipes
+
+Check any of these with `trier explain <URL>` before relying on it, and run `trier check` after every edit.
+
+#### Work repositories in a separate browser
+
+```toml
+[[rules]]
+hosts = ["github.com/ab-company/**", "gitlab.com/ab-company/**"]
+browser = "google-chrome"
+```
+
+Paths are case-sensitive. If links to the organization appear with different capitalization, list each spelling (`"github.com/AB-Company/**"`).
+
+#### A whole domain, including its subdomains
+
+```toml
+[[rules]]
+hosts = ["ab-company.example"]
+browser = "microsoft-edge"
+include_subdomains = true
+```
+
+This matches `ab-company.example`, `mail.ab-company.example` and `wiki.internal.ab-company.example`, but not `not-ab-company.example`.
+
+#### Local development servers
+
+```toml
+[[rules]]
+hosts = ["localhost", "127.0.0.1", "[::1]"]
+browser = "firefox@developer-edition"
+```
+
+Ports are ignored, so this covers `http://localhost:3000`, `http://127.0.0.1:8080` and every other port.
+
+#### A browser trier does not know
+
+Look up the app's bundle identifier, then give it a name of your choice:
+
+```sh
+mdls -name kMDItemCFBundleIdentifier -raw "/Applications/Example Browser.app"
+```
+
+```toml
+[browsers.example]
+bundle_id = "com.example.browser" # the value printed above
+
+[[rules]]
+hosts = ["example.com"]
+browser = "example"
+```
+
+`trier browsers` then lists it as `custom` with its install path. Defining a built-in name (for example `[browsers.safari]`) replaces that built-in's bundle id; `trier check` reports the override.
+
+#### Specific rules before broad ones
+
+The first matching rule wins, so a narrow rule must come before a broad one for the same host:
+
+```toml
+[[rules]]
+hosts = ["github.com/ab-company/**"]
+browser = "google-chrome"
+
+[[rules]]
+hosts = ["github.com"]
+browser = "firefox"
+```
+
+In the opposite order every GitHub link would open in Firefox, and `trier check` would warn:
+
+```text
+warning: rules[1] never matches: every host is already matched by rules[0]
+```
+
 ## Commands
 
 | Command       | Example                                             | What it does                                                                              |
 | ------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `check`       | `trier check`                                       | Validate the config; also warns about shadowed rules and browsers that are not installed. |
-| `explain`     | `trier explain https://github.com/mk-system/trier`  | Show the matched rule (or fallback), browser, bundle id and app path.                     |
+| `explain`     | `trier explain https://github.com/ab-company/trier`  | Show the matched rule (or fallback), browser, bundle id and app path.                     |
 | `open`        | `trier open https://example.com https://github.com` | Open URLs in their decided browsers.                                                      |
 | `browsers`    | `trier browsers`                                    | List built-in and custom browsers and where they are installed. Works without a config.   |
 | `register`    | `trier register`                                    | Generate `~/Applications/Trier.app` and make it the default browser.                      |
