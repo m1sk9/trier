@@ -11,7 +11,9 @@ pub const CONFIG_ENV: &str = "TRIER_CONFIG";
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PathsError {
-    #[error("cannot locate the {what} directory: neither {xdg_var} nor HOME is set")]
+    #[error(
+        "cannot locate the {what} directory: {xdg_var} is unset or not absolute, and HOME is not set"
+    )]
     NoHome {
         what: &'static str,
         xdg_var: &'static str,
@@ -206,7 +208,7 @@ mod tests {
         let _env = EnvGuard::new(&[]);
         assert_eq!(
             state_dir().unwrap_err().to_string(),
-            "cannot locate the state directory: neither XDG_STATE_HOME nor HOME is set"
+            "cannot locate the state directory: XDG_STATE_HOME is unset or not absolute, and HOME is not set"
         );
     }
 }

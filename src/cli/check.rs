@@ -16,6 +16,10 @@ pub fn run(path: &Path, out: &mut dyn Write, err: &mut dyn Write) -> io::Result<
             }
             return Ok(false);
         }
+        Err(e @ ConfigError::Read { .. }) => {
+            writeln!(err, "error: {e}")?;
+            return Ok(false);
+        }
         Err(e) => {
             writeln!(err, "error: {}: {e}", path.display())?;
             return Ok(false);
@@ -118,6 +122,14 @@ mod tests {
     fn missing_file_is_an_error() {
         let (ok, _, err) = check(Path::new("/nonexistent/trier/config.toml"));
         assert!(!ok);
-        assert!(err.contains("failed to read"), "{err}");
+        assert!(
+            err.starts_with("error: failed to read /nonexistent/trier/config.toml: "),
+            "{err}"
+        );
+        assert_eq!(
+            err.matches("/nonexistent/trier/config.toml").count(),
+            1,
+            "{err}"
+        );
     }
 }

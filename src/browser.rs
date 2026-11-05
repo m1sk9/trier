@@ -80,10 +80,9 @@ impl TryFrom<String> for BundleId {
     type Error = EmptyBundleId;
 
     fn try_from(id: String) -> Result<Self, Self::Error> {
-        if id.trim().is_empty() {
-            Err(EmptyBundleId)
-        } else {
-            Ok(Self(id))
+        match id.trim() {
+            "" => Err(EmptyBundleId),
+            trimmed => Ok(Self(trimmed.to_owned())),
         }
     }
 }
@@ -190,6 +189,14 @@ mod tests {
     #[test]
     fn bundle_id_rejects_blank() {
         assert_eq!(BundleId::try_from("  ".to_owned()), Err(EmptyBundleId));
+    }
+
+    #[test]
+    fn bundle_id_is_trimmed() {
+        assert_eq!(
+            BundleId::try_from(" com.apple.Safari\n".to_owned()).map(|id| id.as_str().to_owned()),
+            Ok("com.apple.Safari".to_owned())
+        );
     }
 
     #[test]

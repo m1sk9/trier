@@ -23,6 +23,12 @@ pub enum PatternError {
     MisplacedRecursive(String),
     #[error("host pattern `{0}` has an empty host")]
     EmptyHost(String),
+    #[error(
+        "host pattern `{0}` has an invalid host: use [a-zA-Z0-9._-] (punycode for IDNs) or a bracketed IPv6 address"
+    )]
+    InvalidHost(String),
+    #[error("host pattern `{0}` must not contain a query, a fragment, or whitespace")]
+    InvalidPath(String),
 }
 
 impl HostPattern {
@@ -52,19 +58,19 @@ impl std::str::FromStr for HostPattern {
     type Err = PatternError;
 
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        if raw.contains("://") {
+        // Only a `://` inside the host part is a scheme; paths such as
+        // `web.archive.org/web/https://...` may legitimately contain one.
+        if raw
+            .split_once("://")
+            .is_some_and(|(scheme, _)| !scheme.contains('/'))
+        {
             return Err(PatternError::Scheme(raw.to_owned()));
         }
         let (host, path) = raw.split_once('/').unwrap_or((raw, ""));
         if host.is_empty() {
             return Err(PatternError::EmptyHost(raw.to_owned()));
         }
-        if host.contains(':') {
-            return Err(PatternError::Port(raw.to_owned()));
-        }
-        if host.contains('*') {
-            return Err(PatternError::Wildcard(raw.to_owned()));
-        }
+        validate_host(host).map_err(|e| e(raw.to_owned()))?;
 
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         let mut segments = Vec::with_capacity(parts.len());
@@ -77,6 +83,8 @@ impl std::str::FromStr for HostPattern {
                 recursive = true;
             } else if part.contains('*') {
                 return Err(PatternError::Wildcard(raw.to_owned()));
+            } else if part.contains(['?', '#']) || part.contains(char::is_whitespace) {
+                return Err(PatternError::InvalidPath(raw.to_owned()));
             } else {
                 segments.push((*part).to_owned());
             }
@@ -88,6 +96,36 @@ impl std::str::FromStr for HostPattern {
             recursive,
         })
     }
+}
+
+fn validate_host(host: &str) -> Result<(), fn(String) -> PatternError> {
+    if let Some(rest) = host.strip_prefix('[') {
+        return match rest.split_once(']') {
+            Some((addr, ""))
+                if !addr.is_empty()
+                    && addr
+                        .chars()
+                        .all(|c| c.is_ascii_hexdigit() || matches!(c, ':' | '.')) =>
+            {
+                Ok(())
+            }
+            Some((_, port)) if port.starts_with(':') => Err(PatternError::Port),
+            _ => Err(PatternError::InvalidHost),
+        };
+    }
+    if host.contains(':') {
+        return Err(PatternError::Port);
+    }
+    if host.contains('*') {
+        return Err(PatternError::Wildcard);
+    }
+    if !host
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_'))
+    {
+        return Err(PatternError::InvalidHost);
+    }
+    Ok(())
 }
 
 impl fmt::Display for HostPattern {
@@ -201,6 +239,61 @@ mod tests {
                 "github.com/**/trier".into()
             ))
         );
+    }
+
+    #[test]
+    fn rejects_scheme_without_path() {
+        assert_eq!(
+            parse("https://"),
+            Err(PatternError::Scheme("https://".into()))
+        );
+    }
+
+    #[test]
+    fn scheme_like_text_in_path_is_allowed() {
+        let p = parse("web.archive.org/web/https://example.com").unwrap();
+        assert_eq!(p.segments(), ["web", "https:", "example.com"]);
+    }
+
+    #[test]
+    fn accepts_bracketed_ipv6_host() {
+        assert_eq!(parse("[::1]/**").unwrap().host(), "[::1]");
+        assert_eq!(parse("[FE80::1]").unwrap().host(), "[fe80::1]");
+    }
+
+    #[test]
+    fn rejects_port_on_ipv6_host() {
+        assert_eq!(
+            parse("[::1]:3000"),
+            Err(PatternError::Port("[::1]:3000".into()))
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_ipv6_host() {
+        for bad in ["[]", "[::1", "[::g]", "[::1]x"] {
+            assert_eq!(parse(bad), Err(PatternError::InvalidHost(bad.into())));
+        }
+    }
+
+    #[test]
+    fn rejects_host_characters_that_never_appear_in_a_url_host() {
+        for bad in [
+            "git hub.com",
+            "user@github.com",
+            "github.com?x",
+            "github.com#x",
+            "例え.jp",
+        ] {
+            assert_eq!(parse(bad), Err(PatternError::InvalidHost(bad.into())));
+        }
+    }
+
+    #[test]
+    fn rejects_query_fragment_or_whitespace_in_path() {
+        for bad in ["github.com/a?b", "github.com/a#b", "github.com/a b"] {
+            assert_eq!(parse(bad), Err(PatternError::InvalidPath(bad.into())));
+        }
     }
 
     #[test]

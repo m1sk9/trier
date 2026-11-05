@@ -7,7 +7,9 @@ pub const EXAMPLE: &str = include_str!("../../config/config.toml.example");
 pub enum InitError {
     #[error("{} already exists (use --force to overwrite)", .0.display())]
     AlreadyExists(PathBuf),
-    #[error("failed to write {}: {source}", path.display())]
+    // The io error is exposed via `source()`; repeating it here would make
+    // anyhow print it twice.
+    #[error("failed to write {}", path.display())]
     Io { path: PathBuf, source: io::Error },
 }
 
