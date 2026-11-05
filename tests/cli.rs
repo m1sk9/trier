@@ -1,0 +1,169 @@
+use std::path::{Path, PathBuf};
+
+use assert_cmd::Command;
+
+const EXAMPLE: &str = include_str!("../config/config.toml.example");
+
+/// A fresh per-test directory, so parallel tests never share files.
+fn test_dir(name: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("cli-{name}"));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+/// `trier` with an environment that does not depend on the host machine.
+fn trier(home: &Path) -> Command {
+    let mut cmd = Command::cargo_bin("trier").unwrap();
+    cmd.env_remove("TRIER_CONFIG")
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("XDG_STATE_HOME")
+        .env("HOME", home);
+    cmd
+}
+
+fn stdout(output: &std::process::Output) -> String {
+    String::from_utf8(output.stdout.clone()).unwrap()
+}
+
+fn stderr(output: &std::process::Output) -> String {
+    String::from_utf8(output.stderr.clone()).unwrap()
+}
+
+fn example_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml.example")
+}
+
+#[test]
+fn check_accepts_example_config() {
+    let home = test_dir("check-example");
+    let path = example_path();
+    let output = trier(&home)
+        .args(["check", "--config"])
+        .arg(&path)
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    assert!(stdout(&output).contains(&format!("OK: {}", path.display())));
+}
+
+#[test]
+fn check_rejects_broken_config_with_exit_1() {
+    let home = test_dir("check-broken");
+    let path = home.join("broken.toml");
+    std::fs::write(&path, "version = 2\n").unwrap();
+    let output = trier(&home)
+        .args(["check", "--config"])
+        .arg(&path)
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    assert!(
+        stderr(&output).contains("unsupported config version 2"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn check_rejects_missing_config_with_exit_1() {
+    let home = test_dir("check-missing");
+    let output = trier(&home)
+        .arg("check")
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    assert!(stderr(&output).contains("failed to read"));
+}
+
+#[test]
+fn config_path_defaults_to_home_dot_config() {
+    let home = test_dir("path-home");
+    trier(&home)
+        .args(["config", "path"])
+        .assert()
+        .success()
+        .stdout(format!(
+            "{}\n",
+            home.join(".config/trier/config.toml").display()
+        ));
+}
+
+#[test]
+fn config_path_honors_xdg_config_home() {
+    let home = test_dir("path-xdg");
+    let xdg = home.join("xdg");
+    trier(&home)
+        .env("XDG_CONFIG_HOME", &xdg)
+        .args(["config", "path"])
+        .assert()
+        .success()
+        .stdout(format!("{}\n", xdg.join("trier/config.toml").display()));
+}
+
+#[test]
+fn config_path_honors_trier_config_env() {
+    let home = test_dir("path-env");
+    trier(&home)
+        .env("TRIER_CONFIG", "/env/config.toml")
+        .args(["config", "path"])
+        .assert()
+        .success()
+        .stdout("/env/config.toml\n");
+}
+
+#[test]
+fn config_path_flag_wins_over_env() {
+    let home = test_dir("path-flag");
+    trier(&home)
+        .env("TRIER_CONFIG", "/env/config.toml")
+        .args(["config", "path", "--config", "/flag/config.toml"])
+        .assert()
+        .success()
+        .stdout("/flag/config.toml\n");
+}
+
+#[test]
+fn config_init_creates_example_at_resolved_path() {
+    let home = test_dir("init-create");
+    let path = home.join(".config/trier/config.toml");
+    trier(&home).args(["config", "init"]).assert().success();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), EXAMPLE);
+    trier(&home).arg("check").assert().success();
+}
+
+#[test]
+fn config_init_refuses_to_overwrite_without_force() {
+    let home = test_dir("init-refuse");
+    let path = home.join("config.toml");
+    std::fs::write(&path, "user edits").unwrap();
+    let output = trier(&home)
+        .args(["config", "init", "--config"])
+        .arg(&path)
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+    assert!(
+        stderr(&output).contains("already exists"),
+        "{}",
+        stderr(&output)
+    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "user edits");
+}
+
+#[test]
+fn config_init_force_overwrites() {
+    let home = test_dir("init-force");
+    let path = home.join("config.toml");
+    std::fs::write(&path, "user edits").unwrap();
+    trier(&home)
+        .args(["config", "init", "--force", "--config"])
+        .arg(&path)
+        .assert()
+        .success();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), EXAMPLE);
+}

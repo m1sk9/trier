@@ -1,0 +1,51 @@
+# trier configuration.
+#
+# Location, first match wins:
+#   1. --config <PATH>
+#   2. $TRIER_CONFIG
+#   3. $XDG_CONFIG_HOME/trier/config.toml
+#   4. ~/.config/trier/config.toml
+#
+# Validate with `trier check`.
+
+# Schema version. Required; only 1 is supported.
+version = 1
+
+# Browser used when no rule matches. Optional.
+# Any built-in name or a name defined under [browsers].
+# Built-in names are Homebrew cask tokens:
+#   firefox, firefox@developer-edition, firefox@nightly,
+#   google-chrome, google-chrome@dev, tor-browser, safari
+default_browser = "safari"
+
+# Custom browsers, keyed by the name rules refer to. Optional.
+# A name may contain [a-z0-9@+._-] and must start with [a-z0-9].
+# Defining a built-in name here overrides the built-in bundle id.
+# Find a bundle id with:
+#   mdls -name kMDItemCFBundleIdentifier -raw /Applications/<App>.app
+[browsers."firefox@dev"]
+bundle_id = "org.mozilla.firefoxdeveloperedition"
+
+# Rules are evaluated in file order; the first rule with a matching host wins.
+#
+# hosts:              Required, non-empty. Each entry is `host[/path]`:
+#                       - no scheme, no port; the host is case-insensitive
+#                       - `github.com` and `github.com/**` match every path
+#                       - `github.com/mk-system` matches only that exact path
+#                       - `github.com/mk-system/**` matches it and everything below
+#                       - `**` is allowed only as the last segment; `*` is reserved
+# browser:            Required. A built-in name or a name defined under [browsers].
+# include_subdomains: Optional, default false. When true, `github.com` also
+#                     matches `gist.github.com` (but never `evilgithub.com`).
+[[rules]]
+hosts = ["github.com/mk-system/**"]
+browser = "firefox@developer-edition"
+
+[[rules]]
+hosts = ["localhost", "127.0.0.1"]
+browser = "firefox@dev"
+
+[[rules]]
+hosts = ["google.com"]
+browser = "google-chrome"
+include_subdomains = true
