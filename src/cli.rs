@@ -1,6 +1,7 @@
 //! Subcommand implementations. Argument parsing lives in `main.rs`.
 
 use std::fmt;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use url::Url;
@@ -16,6 +17,9 @@ pub mod check;
 pub mod config;
 pub mod explain;
 pub mod open;
+pub mod register;
+pub mod status;
+pub mod unregister;
 
 /// Finds where the app with a bundle id is installed.
 ///
@@ -37,15 +41,39 @@ pub enum Stream {
 #[derive(Debug, Default)]
 pub struct Report {
     lines: Vec<(Stream, String)>,
+    live: bool,
 }
 
 impl Report {
+    /// A report that prints each line immediately instead of keeping it.
+    ///
+    /// For commands whose progress must be visible while they run, such as
+    /// `register`, which may block on a macOS confirmation dialog. Write
+    /// errors are ignored: there is nowhere left to report them.
+    pub fn live() -> Self {
+        Self {
+            lines: Vec::new(),
+            live: true,
+        }
+    }
+
     pub fn out(&mut self, line: impl fmt::Display) {
-        self.lines.push((Stream::Out, line.to_string()));
+        self.push(Stream::Out, line.to_string());
     }
 
     pub fn err(&mut self, line: impl fmt::Display) {
-        self.lines.push((Stream::Err, line.to_string()));
+        self.push(Stream::Err, line.to_string());
+    }
+
+    fn push(&mut self, stream: Stream, line: String) {
+        if !self.live {
+            self.lines.push((stream, line));
+            return;
+        }
+        let _ = match stream {
+            Stream::Out => writeln!(io::stdout(), "{line}"),
+            Stream::Err => writeln!(io::stderr(), "{line}"),
+        };
     }
 
     pub fn lines(&self) -> &[(Stream, String)] {
@@ -142,12 +170,7 @@ impl<'a> UrlResolver<'a> {
         if let Some(recorded) = &self.recorded_default {
             return recorded.clone();
         }
-        let state = self
-            .state_path
-            .as_ref()
-            .map_err(ToString::to_string)
-            .and_then(|path| State::load(path).map_err(|e| e.to_string()));
-        let recorded = match state {
+        let recorded = match State::load_located(self.state_path.as_deref()) {
             Ok(state) => state.previous_default_browser_bundle_id,
             Err(e) => {
                 report.err(format_args!(
@@ -195,5 +218,13 @@ mod tests {
         );
         assert_eq!(report.stdout(), "a\nc\n");
         assert_eq!(report.stderr(), "b\n");
+    }
+
+    #[test]
+    fn live_report_keeps_nothing() {
+        let mut report = Report::live();
+        report.out("live stdout line from a test");
+        report.err("live stderr line from a test");
+        assert!(report.lines().is_empty());
     }
 }

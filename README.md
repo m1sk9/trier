@@ -3,7 +3,7 @@
 trier routes URLs to the right browser on macOS. You describe which hosts open in which browser in a TOML file, and trier picks the browser for each URL, falling back to a default when no rule matches.
 
 > [!NOTE]
-> trier is under active development. It can open URLs (`trier open <URL>...`), show which browser a URL would open in (`trier explain <URL>`), list known browsers (`trier browsers`), validate the config (`trier check`), and manage the config file (`trier config`). Registering trier as the system's default browser is not implemented yet.
+> trier is under active development. Run `trier register` to make it the default browser (it generates `~/Applications/Trier.app`); `trier status` shows whether it is, and `trier unregister` restores the previous default. See `trier --help` for all commands.
 
 ## Install
 
