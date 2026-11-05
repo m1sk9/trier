@@ -1,0 +1,4 @@
+# main.rs is the binary entrypoint: argument dispatch and process wiring,
+# not unit-testable. Exclude it so coverage reflects the testable logic.
+ignore:
+  - "src/main.rs"
