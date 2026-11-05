@@ -212,7 +212,10 @@ mod tests {
     #[test]
     fn routes_every_url_in_one_event() {
         let r = run(
-            &["https://github.com/ab-company/trier", "https://example.com/"],
+            &[
+                "https://github.com/ab-company/trier",
+                "https://example.com/",
+            ],
             &example_path(),
             Path::new(NO_STATE),
         );
