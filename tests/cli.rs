@@ -173,14 +173,14 @@ fn config_init_force_overwrites() {
 fn explain_prints_matched_rule_and_browser() {
     let home = test_dir("explain-rule");
     let output = trier(&home)
-        .args(["explain", "https://github.com/mk-system/trier", "--config"])
+        .args(["explain", "https://github.com/ab-company/trier", "--config"])
         .arg(example_path())
         .assert()
         .success()
         .get_output()
         .clone();
     let out = stdout(&output);
-    assert!(out.contains("rules[0] (github.com/mk-system/**)"), "{out}");
+    assert!(out.contains("rules[0] (github.com/ab-company/**)"), "{out}");
     assert!(out.contains("firefox@developer-edition"), "{out}");
 }
 

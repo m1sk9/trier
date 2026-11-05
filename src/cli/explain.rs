@@ -62,13 +62,13 @@ mod tests {
     #[test]
     fn prints_matched_rule_and_browser() {
         let (ok, out, err) = explain(
-            "https://github.com/mk-system/trier",
+            "https://github.com/ab-company/trier",
             &example_path(),
             Path::new(NO_STATE),
         );
         assert!(ok, "{err}");
         assert!(
-            out.contains("matched:   rules[0] (github.com/mk-system/**)"),
+            out.contains("matched:   rules[0] (github.com/ab-company/**)"),
             "{out}"
         );
         assert!(
@@ -128,7 +128,7 @@ mod tests {
     fn broken_state_file_is_not_read_when_a_rule_decides() {
         let state = broken_state("broken-rule.toml");
         let (ok, _, err) = explain(
-            "https://github.com/mk-system/trier",
+            "https://github.com/ab-company/trier",
             &example_path(),
             &state,
         );
@@ -157,7 +157,7 @@ mod tests {
             xdg_var: "XDG_STATE_HOME",
         });
         let ok = run(
-            "https://github.com/mk-system/trier",
+            "https://github.com/ab-company/trier",
             &example_path(),
             no_home,
             &lookup_installed(&[]),
