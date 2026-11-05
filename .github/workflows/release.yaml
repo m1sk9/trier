@@ -108,9 +108,9 @@ jobs:
           TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
         run: gh release upload "${TAG_NAME}" dist/* --clobber --repo "${{ github.repository }}"
 
-  # Expected to fail on the very first release: the tap's publish workflow
-  # refuses a formula that does not exist yet, so Formula/trier.rb is added
-  # by hand from that release's archive URL and SHA256SUMS.
+  # The tap's publish workflow refuses a formula it does not have, so
+  # Formula/trier.rb had to be added by hand once; from then on this dispatch
+  # opens the bump pull request there.
   homebrew:
     needs:
       - release-please
