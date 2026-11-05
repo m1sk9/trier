@@ -6,9 +6,12 @@ compile_error!("trier supports macOS only: it routes URLs through Launch Service
 pub mod browser;
 pub mod cli;
 pub mod config;
+pub mod dispatch;
+pub mod handler;
 pub mod macos;
 pub mod paths;
 pub mod pattern;
+pub mod register;
 pub mod resolve;
 pub mod state;
 #[cfg(test)]

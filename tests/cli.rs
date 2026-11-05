@@ -15,7 +15,8 @@ fn test_dir(name: &str) -> PathBuf {
 /// `trier` with an environment that does not depend on the host machine.
 fn trier(home: &Path) -> Command {
     let mut cmd = Command::cargo_bin("trier").unwrap();
-    cmd.env_remove("TRIER_CONFIG")
+    cmd.env_remove("TRIER_HANDLER")
+        .env_remove("TRIER_CONFIG")
         .env_remove("XDG_CONFIG_HOME")
         .env_remove("XDG_STATE_HOME")
         .env("HOME", home);
@@ -231,4 +232,32 @@ fn browsers_lists_builtin_and_custom_entries() {
     assert!(row("firefox@dev").contains("custom"), "{out}");
     assert!(row("safari").contains("built-in"), "{out}");
     assert!(row("safari").trim_end().ends_with("Safari.app"), "{out}");
+}
+
+#[test]
+fn no_subcommand_prints_help_and_exits_2() {
+    let home = test_dir("no-subcommand");
+    let output = trier(&home).assert().code(2).get_output().clone();
+    assert!(stderr(&output).contains("Usage:"), "{}", stderr(&output));
+}
+
+#[test]
+fn status_reports_an_unregistered_install() {
+    let home = test_dir("status");
+    let output = trier(&home)
+        .args(["status", "--config"])
+        .arg(example_path())
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    let out = stdout(&output);
+    assert!(out.contains("registered: no"), "{out}");
+    assert!(
+        out.contains(&format!(
+            "bundle:     {}",
+            home.join("Applications/Trier.app").display()
+        )),
+        "{out}"
+    );
 }

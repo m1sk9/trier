@@ -44,6 +44,11 @@ pub fn state_file() -> Result<PathBuf, PathsError> {
     Ok(state_dir()?.join("state.toml"))
 }
 
+/// `$HOME`, treating an empty value as unset.
+pub fn home_dir() -> Option<PathBuf> {
+    non_empty_var("HOME").map(PathBuf::from)
+}
+
 fn base_dir(
     xdg_var: &'static str,
     home_fallback: &str,
@@ -55,8 +60,8 @@ fn base_dir(
     {
         return Ok(dir);
     }
-    non_empty_var("HOME")
-        .map(|home| PathBuf::from(home).join(home_fallback))
+    home_dir()
+        .map(|home| home.join(home_fallback))
         .ok_or(PathsError::NoHome { what, xdg_var })
 }
 
@@ -215,6 +220,12 @@ mod tests {
             state_file(),
             Ok(PathBuf::from("/xdg/state/trier/state.toml"))
         );
+    }
+
+    #[test]
+    fn empty_home_is_no_home() {
+        let _env = EnvGuard::new(&[("HOME", "")]);
+        assert_eq!(home_dir(), None);
     }
 
     #[test]

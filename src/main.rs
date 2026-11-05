@@ -4,10 +4,10 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use trier::{cli, macos, paths};
+use trier::{cli, handler, macos, paths, register};
 
 #[derive(Debug, Parser)]
-#[command(version, about)]
+#[command(version, about, arg_required_else_help = true)]
 struct Args {
     /// Config file path. Defaults to $TRIER_CONFIG, then $XDG_CONFIG_HOME/trier/config.toml,
     /// then ~/.config/trier/config.toml.
@@ -35,6 +35,12 @@ enum Command {
     },
     /// List built-in and custom browsers and where they are installed.
     Browsers,
+    /// Make trier the default browser by generating and registering ~/Applications/Trier.app.
+    Register,
+    /// Restore the previous default browser and remove ~/Applications/Trier.app.
+    Unregister,
+    /// Show the config, the bundle and whether trier is the default browser.
+    Status,
     /// Manage the config file.
     Config {
         #[command(subcommand)]
@@ -55,10 +61,19 @@ enum ConfigCommand {
 }
 
 fn main() -> anyhow::Result<ExitCode> {
+    // Only the bundle's `LSEnvironment` sets this, so only Launch Services
+    // launches enter handler mode. Not a TTY check: a script running `trier`
+    // without arguments would wait for URLs that never come.
+    if std::env::var_os(macos::HANDLER_ENV).is_some_and(|v| v == "1") {
+        handler::run();
+    }
     let args = Args::parse();
     let config_path = paths::config_path(args.config.as_deref())?;
 
-    let mut report = cli::Report::default();
+    let mut report = match args.command {
+        Command::Register | Command::Unregister => cli::Report::live(),
+        _ => cli::Report::default(),
+    };
     let ok = match args.command {
         Command::Check => {
             cli::check::run(&config_path, &macos::app_path_for_bundle_id, &mut report)
@@ -80,6 +95,18 @@ fn main() -> anyhow::Result<ExitCode> {
         Command::Browsers => {
             cli::browsers::run(&config_path, &macos::app_path_for_bundle_id, &mut report)
         }
+        Command::Register => cli::register::run(&config_path, &mut report),
+        Command::Unregister => cli::unregister::run(&mut report),
+        Command::Status => cli::status::run(
+            cli::status::Inputs {
+                config_path: config_path.clone(),
+                bundle: register::installed_bundle_path().map_err(|e| e.to_string()),
+                state_path: paths::state_file(),
+                log_path: paths::log_file(),
+                https_handler: macos::default_https_handler().map(|(_, id)| id),
+            },
+            &mut report,
+        ),
         Command::Config {
             command: ConfigCommand::Path,
         } => {

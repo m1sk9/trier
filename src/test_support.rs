@@ -43,3 +43,38 @@ pub fn lookup_installed(
 pub fn all_installed(id: &BundleId) -> Option<PathBuf> {
     Some(PathBuf::from(format!("/Applications/{id}.app")))
 }
+
+/// Where tests put a bundle under `dir`; not `*.app`, so Finder and
+/// Spotlight do not treat it as an application.
+pub fn test_bundle(dir: &Path) -> PathBuf {
+    dir.join("Trier.test-bundle")
+}
+
+/// A bundle that fails trier's identity check, as a user's own app at the
+/// same path would.
+pub fn foreign_bundle(dir: &Path) -> PathBuf {
+    let bundle = test_bundle(dir);
+    std::fs::create_dir_all(bundle.join("Contents")).unwrap();
+    std::fs::write(
+        bundle.join("Contents/Info.plist"),
+        "<plist><dict><key>CFBundleIdentifier</key><string>com.example.other</string></dict></plist>",
+    )
+    .unwrap();
+    bundle
+}
+
+/// A bundle that passes trier's identity check but is not an application.
+///
+/// Only an `Info.plist` naming trier's identifier: a complete bundle with
+/// that identifier gets registered with Launch Services and would receive
+/// the user's clicked links.
+pub fn fake_trier_bundle(dir: &Path) -> PathBuf {
+    let bundle = test_bundle(dir);
+    std::fs::create_dir_all(bundle.join("Contents")).unwrap();
+    std::fs::write(
+        bundle.join("Contents/Info.plist"),
+        format!("<string>{}</string>", crate::register::BUNDLE_ID),
+    )
+    .unwrap();
+    bundle
+}
