@@ -5,11 +5,15 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   release-please:
     runs-on: ubuntu-24.04
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
       major: ${{ steps.release.outputs.major }}
       minor: ${{ steps.release.outputs.minor }}
       patch: ${{ steps.release.outputs.patch }}
@@ -35,3 +39,102 @@ jobs:
         id: release
         with:
           token: ${{ steps.app-token.outputs.token }}
+
+  assets:
+    name: assets (aarch64-apple-darwin)
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-apple-darwin
+
+      - name: Build
+        run: cargo build --release --locked --target aarch64-apple-darwin
+
+      # The archive name carries no version, so a Homebrew bump only has to
+      # rewrite the tag segment of the download URL.
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p dist/trier
+          cp target/aarch64-apple-darwin/release/trier LICENSE README.md dist/trier/
+          tar -C dist -czf trier-aarch64-apple-darwin.tar.gz trier
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: trier-aarch64-apple-darwin
+          path: trier-aarch64-apple-darwin.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  release-assets:
+    needs:
+      - release-please
+      - assets
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download archives
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: trier-*
+          merge-multiple: true
+
+      # SHA256SUMS lets the tap's publish workflow read every checksum in one
+      # request instead of downloading each archive to hash it.
+      - name: Generate checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          for archive in *.tar.gz; do
+            sha256sum "${archive}" > "${archive}.sha256"
+          done
+          sha256sum *.tar.gz > SHA256SUMS
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release upload "${TAG_NAME}" dist/* --clobber --repo "${{ github.repository }}"
+
+  # Expected to fail on the very first release: the tap's publish workflow
+  # refuses a formula that does not exist yet, so Formula/trier.rb is added
+  # by hand from that release's archive URL and SHA256SUMS.
+  homebrew:
+    needs:
+      - release-please
+      - release-assets
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Get token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: m1sk9
+          repositories: homebrew-tap
+          # Skip token revocation because expired tokens are automatically
+          # invalidated by GitHub anyway.
+          skip-token-revoke: true
+
+      - name: Dispatch the formula bump
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          gh api repos/m1sk9/homebrew-tap/dispatches \
+            -f event_type=publish \
+            -f "client_payload[formula]=trier" \
+            -f "client_payload[tag]=${TAG_NAME}"
