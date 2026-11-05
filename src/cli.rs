@@ -18,6 +18,7 @@ pub mod config;
 pub mod explain;
 pub mod open;
 pub mod register;
+pub mod skill;
 pub mod status;
 pub mod unregister;
 
@@ -97,6 +98,37 @@ impl Report {
             .map(|(_, line)| format!("{line}\n"))
             .collect()
     }
+}
+
+/// Writes `content` to `path`, creating parent directories.
+///
+/// Without `force` the file must not exist. `create_new` instead of an
+/// `exists()` check so a file appearing in between is never clobbered.
+pub(crate) fn write_text(path: &Path, content: &str, force: bool) -> Result<(), WriteError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(WriteError::Io)?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true);
+    if force {
+        options.create(true).truncate(true);
+    } else {
+        options.create_new(true);
+    }
+    let mut file = options.open(path).map_err(|e| {
+        if e.kind() == io::ErrorKind::AlreadyExists {
+            WriteError::AlreadyExists
+        } else {
+            WriteError::Io(e)
+        }
+    })?;
+    file.write_all(content.as_bytes()).map_err(WriteError::Io)
+}
+
+#[derive(Debug)]
+pub(crate) enum WriteError {
+    AlreadyExists,
+    Io(io::Error),
 }
 
 /// Loads the config, reporting `error:` lines and returning `None` on failure.
@@ -218,6 +250,42 @@ mod tests {
         );
         assert_eq!(report.stdout(), "a\nc\n");
         assert_eq!(report.stderr(), "b\n");
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = crate::test_support::temp_dir(&format!("write-text-{name}"));
+        std::fs::remove_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn write_text_reports_an_existing_file() {
+        let path = scratch("exists").join("f");
+        write_text(&path, "a", false).unwrap();
+        assert!(matches!(
+            write_text(&path, "b", false),
+            Err(WriteError::AlreadyExists)
+        ));
+    }
+
+    #[test]
+    fn write_text_reports_an_uncreatable_parent() {
+        let blocker = scratch("parent").join("file");
+        std::fs::write(&blocker, "").unwrap();
+        assert!(matches!(
+            write_text(&blocker.join("f"), "a", true),
+            Err(WriteError::Io(_))
+        ));
+    }
+
+    #[test]
+    fn write_text_reports_an_unopenable_target() {
+        let dir = scratch("target");
+        assert!(matches!(
+            write_text(&dir, "a", true),
+            Err(WriteError::Io(_))
+        ));
     }
 
     #[test]
