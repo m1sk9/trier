@@ -2,7 +2,8 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use crate::browser::builtin_bundle_id;
-use crate::config::{Config, ConfigError};
+use crate::config::{Config, ConfigError, Rule};
+use crate::pattern::covers;
 
 /// Loads and validates the config at `path`, reporting to `out` / `err`.
 ///
@@ -10,18 +11,8 @@ use crate::config::{Config, ConfigError};
 pub fn run(path: &Path, out: &mut dyn Write, err: &mut dyn Write) -> io::Result<bool> {
     let config = match Config::load(path) {
         Ok(config) => config,
-        Err(ConfigError::Invalid(violations)) => {
-            for v in violations {
-                writeln!(err, "error: {}: {v}", path.display())?;
-            }
-            return Ok(false);
-        }
-        Err(e @ ConfigError::Read { .. }) => {
-            writeln!(err, "error: {e}")?;
-            return Ok(false);
-        }
         Err(e) => {
-            writeln!(err, "error: {}: {e}", path.display())?;
+            report_config_error(path, &e, err)?;
             return Ok(false);
         }
     };
@@ -35,8 +26,51 @@ pub fn run(path: &Path, out: &mut dyn Write, err: &mut dyn Write) -> io::Result<
             )?;
         }
     }
+    for (shadowed, by) in shadowed_rules(&config.rules) {
+        writeln!(
+            out,
+            "warning: rules[{shadowed}] never matches: every host is already matched by rules[{by}]"
+        )?;
+    }
     writeln!(out, "OK: {}", path.display())?;
     Ok(true)
+}
+
+/// Writes one `error:` line per problem in `e`.
+pub fn report_config_error(path: &Path, e: &ConfigError, err: &mut dyn Write) -> io::Result<()> {
+    match e {
+        ConfigError::Invalid(violations) => {
+            for v in violations {
+                writeln!(err, "error: {}: {v}", path.display())?;
+            }
+            Ok(())
+        }
+        ConfigError::Read { .. } => writeln!(err, "error: {e}"),
+        ConfigError::Parse(_) => writeln!(err, "error: {}: {e}", path.display()),
+    }
+}
+
+/// `(shadowed, by)` index pairs: rule `shadowed` can never match because the
+/// earlier rule `by` covers every one of its host patterns.
+///
+/// A rule covered only by several earlier rules together is not reported;
+/// first-match order keeps `explain` simple, and this check stays pairwise.
+fn shadowed_rules(rules: &[Rule]) -> Vec<(usize, usize)> {
+    rules
+        .iter()
+        .enumerate()
+        .filter_map(|(j, later)| {
+            let by = rules[..j].iter().position(|earlier| {
+                later.hosts.iter().all(|b| {
+                    earlier
+                        .hosts
+                        .iter()
+                        .any(|a| covers(a, earlier.include_subdomains, b, later.include_subdomains))
+                })
+            })?;
+            Some((j, by))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -131,5 +165,44 @@ mod tests {
             1,
             "{err}"
         );
+    }
+
+    #[test]
+    fn rule_covered_by_an_earlier_rule_is_reported_as_shadowed() {
+        let path = write_config(
+            "shadow.toml",
+            "version = 1\n\
+             [[rules]]\nhosts = [\"github.com\"]\nbrowser = \"safari\"\ninclude_subdomains = true\n\
+             [[rules]]\nhosts = [\"example.com\"]\nbrowser = \"safari\"\n\
+             [[rules]]\nhosts = [\"gist.github.com\", \"github.com/mk-system/**\"]\nbrowser = \"firefox\"\n",
+        );
+        let (ok, out, _) = check(&path);
+        assert!(ok, "shadowing is a warning, not an error");
+        assert!(
+            out.contains(
+                "warning: rules[2] never matches: every host is already matched by rules[0]"
+            ),
+            "{out}"
+        );
+        assert_eq!(out.matches("warning:").count(), 1, "{out}");
+    }
+
+    #[test]
+    fn rule_only_partly_covered_is_not_shadowed() {
+        let path = write_config(
+            "partial.toml",
+            "version = 1\n\
+             [[rules]]\nhosts = [\"github.com/mk-system/**\"]\nbrowser = \"safari\"\n\
+             [[rules]]\nhosts = [\"github.com/mk-system/trier\", \"gitlab.com\"]\nbrowser = \"firefox\"\n",
+        );
+        let (ok, out, _) = check(&path);
+        assert!(ok);
+        assert!(!out.contains("warning:"), "{out}");
+    }
+
+    #[test]
+    fn example_config_has_no_shadowed_rules() {
+        let (_, out, _) = check(&example_path());
+        assert!(!out.contains("warning:"), "{out}");
     }
 }

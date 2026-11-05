@@ -167,3 +167,46 @@ fn config_init_force_overwrites() {
         .success();
     assert_eq!(std::fs::read_to_string(&path).unwrap(), EXAMPLE);
 }
+
+#[test]
+fn explain_prints_matched_rule_and_browser() {
+    let home = test_dir("explain-rule");
+    let output = trier(&home)
+        .args(["explain", "https://github.com/mk-system/trier", "--config"])
+        .arg(example_path())
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let out = stdout(&output);
+    assert!(out.contains("rules[0] (github.com/mk-system/**)"), "{out}");
+    assert!(out.contains("firefox@developer-edition"), "{out}");
+}
+
+#[test]
+fn explain_falls_back_to_default_browser() {
+    let home = test_dir("explain-default");
+    let output = trier(&home)
+        .args(["explain", "https://example.com", "--config"])
+        .arg(example_path())
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let out = stdout(&output);
+    assert!(out.contains("matched:   default_browser"), "{out}");
+    assert!(out.contains("browser:   safari"), "{out}");
+}
+
+#[test]
+fn explain_rejects_unsupported_scheme_with_exit_1() {
+    let home = test_dir("explain-scheme");
+    let output = trier(&home)
+        .args(["explain", "mailto:me@example.com", "--config"])
+        .arg(example_path())
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    assert!(stderr(&output).contains("unsupported URL scheme `mailto`"));
+}

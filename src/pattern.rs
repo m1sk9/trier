@@ -40,10 +40,62 @@ impl HostPattern {
         &self.segments
     }
 
-    /// Whether the pattern ends with `/**`.
+    /// Whether the pattern matches every path below its segments.
+    ///
+    /// A bare host is normalized to recursive, so `github.com` and
+    /// `github.com/**` are the same pattern.
     pub fn is_recursive(&self) -> bool {
         self.recursive
     }
+
+    /// Whether `host` and `path` of a URL match this pattern.
+    ///
+    /// `host` must already be lowercase (as `url::Url::host_str` returns it).
+    /// The path is compared verbatim: no percent-decoding, port, query or
+    /// fragment.
+    pub fn matches(&self, host: &str, path: &str, include_subdomains: bool) -> bool {
+        host_matches(&self.host, host, include_subdomains)
+            && self.path_matches(&path_segments(path))
+    }
+
+    fn path_matches(&self, segments: &[&str]) -> bool {
+        if self.recursive {
+            segments.starts_with(&self.segments_as_str())
+        } else {
+            segments == self.segments_as_str()
+        }
+    }
+
+    fn segments_as_str(&self) -> Vec<&str> {
+        self.segments.iter().map(String::as_str).collect()
+    }
+}
+
+/// Whether every URL matched by `b` is also matched by `a`.
+pub fn covers(a: &HostPattern, a_subdomains: bool, b: &HostPattern, b_subdomains: bool) -> bool {
+    let hosts = if b_subdomains {
+        a_subdomains && host_matches(&a.host, &b.host, true)
+    } else {
+        host_matches(&a.host, &b.host, a_subdomains)
+    };
+    let paths = if b.recursive {
+        a.recursive && b.segments.starts_with(&a.segments)
+    } else {
+        a.path_matches(&b.segments_as_str())
+    };
+    hosts && paths
+}
+
+fn host_matches(pattern: &str, host: &str, include_subdomains: bool) -> bool {
+    host == pattern
+        || (include_subdomains
+            && host
+                .strip_suffix(pattern)
+                .is_some_and(|rest| rest.ends_with('.')))
+}
+
+fn path_segments(path: &str) -> Vec<&str> {
+    path.split('/').filter(|s| !s.is_empty()).collect()
 }
 
 impl TryFrom<String> for HostPattern {
@@ -92,8 +144,8 @@ impl std::str::FromStr for HostPattern {
 
         Ok(Self {
             host: host.to_ascii_lowercase(),
+            recursive: recursive || segments.is_empty(),
             segments,
-            recursive,
         })
     }
 }
@@ -134,7 +186,7 @@ impl fmt::Display for HostPattern {
         for segment in &self.segments {
             write!(f, "/{segment}")?;
         }
-        if self.recursive {
+        if self.recursive && !self.segments.is_empty() {
             f.write_str("/**")?;
         }
         Ok(())
@@ -150,11 +202,17 @@ mod tests {
     }
 
     #[test]
-    fn bare_host_has_no_path() {
+    fn bare_host_is_the_same_pattern_as_host_double_star() {
         let p = parse("github.com").unwrap();
         assert_eq!(p.host(), "github.com");
         assert!(p.segments().is_empty());
-        assert!(!p.is_recursive());
+        assert!(p.is_recursive());
+        assert_eq!(parse("github.com/**"), Ok(p));
+    }
+
+    #[test]
+    fn bare_host_displays_without_double_star() {
+        assert_eq!(parse("github.com/**").unwrap().to_string(), "github.com");
     }
 
     #[test]
@@ -307,5 +365,201 @@ mod tests {
             parse("/mk-system/**"),
             Err(PatternError::EmptyHost("/mk-system/**".into()))
         );
+    }
+
+    fn url_matches(pattern: &str, url: &str, include_subdomains: bool) -> bool {
+        let url = url::Url::parse(url).unwrap();
+        parse(pattern)
+            .unwrap()
+            .matches(url.host_str().unwrap(), url.path(), include_subdomains)
+    }
+
+    #[test]
+    fn bare_host_matches_root() {
+        assert!(url_matches("github.com", "https://github.com/", false));
+    }
+
+    #[test]
+    fn bare_host_matches_any_path_ignoring_query_and_fragment() {
+        assert!(url_matches(
+            "github.com",
+            "https://github.com/a/b?x=1#f",
+            false
+        ));
+    }
+
+    #[test]
+    fn subdomain_does_not_match_without_include_subdomains() {
+        assert!(!url_matches(
+            "github.com",
+            "https://gist.github.com/",
+            false
+        ));
+    }
+
+    #[test]
+    fn subdomain_matches_with_include_subdomains() {
+        assert!(url_matches("github.com", "https://gist.github.com/", true));
+    }
+
+    #[test]
+    fn include_subdomains_never_matches_a_suffix_that_is_not_a_label() {
+        assert!(!url_matches("github.com", "https://evilgithub.com/", true));
+    }
+
+    #[test]
+    fn host_comparison_is_case_insensitive() {
+        assert!(url_matches("GitHub.com", "https://GITHUB.COM/", false));
+    }
+
+    #[test]
+    fn double_star_matches_the_prefix_itself() {
+        assert!(url_matches(
+            "github.com/mk-system/**",
+            "https://github.com/mk-system",
+            false
+        ));
+    }
+
+    #[test]
+    fn double_star_matches_paths_below_the_prefix() {
+        assert!(url_matches(
+            "github.com/mk-system/**",
+            "https://github.com/mk-system/trier",
+            false
+        ));
+    }
+
+    #[test]
+    fn double_star_respects_segment_boundaries() {
+        assert!(!url_matches(
+            "github.com/mk-system/**",
+            "https://github.com/mk-systems/x",
+            false
+        ));
+    }
+
+    #[test]
+    fn exact_path_matches_with_or_without_trailing_slash() {
+        assert!(url_matches(
+            "github.com/mk-system",
+            "https://github.com/mk-system",
+            false
+        ));
+        assert!(url_matches(
+            "github.com/mk-system",
+            "https://github.com/mk-system/",
+            false
+        ));
+    }
+
+    #[test]
+    fn exact_path_does_not_match_deeper_paths() {
+        assert!(!url_matches(
+            "github.com/mk-system",
+            "https://github.com/mk-system/trier",
+            false
+        ));
+    }
+
+    #[test]
+    fn port_is_ignored() {
+        assert!(url_matches(
+            "localhost/**",
+            "http://localhost:3000/foo",
+            false
+        ));
+    }
+
+    #[test]
+    fn bracketed_ipv6_pattern_matches_ipv6_url() {
+        assert!(url_matches("[::1]", "http://[::1]:8080/", false));
+    }
+
+    #[test]
+    fn path_is_not_percent_decoded() {
+        assert!(url_matches(
+            "example.com/a%2Fb",
+            "https://example.com/a%2Fb",
+            false
+        ));
+        assert!(!url_matches(
+            "example.com/a%2Fb",
+            "https://example.com/a/b",
+            false
+        ));
+    }
+
+    fn covers_str(a: &str, a_sub: bool, b: &str, b_sub: bool) -> bool {
+        covers(&parse(a).unwrap(), a_sub, &parse(b).unwrap(), b_sub)
+    }
+
+    #[test]
+    fn identical_patterns_cover_each_other() {
+        assert!(covers_str("github.com/a", false, "github.com/a", false));
+        assert!(covers_str(
+            "github.com/a/**",
+            false,
+            "github.com/a/**",
+            false
+        ));
+    }
+
+    #[test]
+    fn double_star_parent_covers_child() {
+        assert!(covers_str(
+            "github.com/a/**",
+            false,
+            "github.com/a/b",
+            false
+        ));
+        assert!(covers_str(
+            "github.com/a/**",
+            false,
+            "github.com/a/b/**",
+            false
+        ));
+        assert!(covers_str("github.com", false, "github.com/a", false));
+    }
+
+    #[test]
+    fn child_does_not_cover_parent() {
+        assert!(!covers_str(
+            "github.com/a/b/**",
+            false,
+            "github.com/a/**",
+            false
+        ));
+    }
+
+    #[test]
+    fn exact_path_does_not_cover_double_star() {
+        assert!(!covers_str("github.com/a", false, "github.com/a/**", false));
+    }
+
+    #[test]
+    fn include_subdomains_parent_covers_subdomain_child() {
+        assert!(covers_str("github.com", true, "gist.github.com", false));
+    }
+
+    #[test]
+    fn host_without_include_subdomains_does_not_cover_subdomain() {
+        assert!(!covers_str("github.com", false, "gist.github.com", false));
+    }
+
+    #[test]
+    fn rule_without_include_subdomains_does_not_cover_one_with_it() {
+        assert!(!covers_str("github.com", false, "github.com", true));
+    }
+
+    #[test]
+    fn include_subdomains_covers_narrower_include_subdomains() {
+        assert!(covers_str("github.com", true, "gist.github.com", true));
+        assert!(!covers_str("gist.github.com", true, "github.com", true));
+    }
+
+    #[test]
+    fn different_hosts_do_not_cover() {
+        assert!(!covers_str("github.com", true, "gitlab.com", false));
     }
 }
