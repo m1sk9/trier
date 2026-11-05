@@ -1,6 +1,23 @@
 [package]
 name = "trier"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2024"
+description = "Route URLs to the right browser on macOS based on host rules."
+license = "MIT"
+repository = "https://github.com/m1sk9/trier"
 
 [dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror = "2.0.21"
+toml = "1.2.0"
+
+[dev-dependencies]
+assert_cmd = "2.2.2"
+
+[profile.release]
+strip = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
