@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::sync::Once;
 
 use crate::browser::BundleId;
 
@@ -77,4 +79,43 @@ pub fn fake_trier_bundle(dir: &Path) -> PathBuf {
     )
     .unwrap();
     bundle
+}
+
+thread_local! {
+    static LOGS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Records log lines per thread, so parallel tests see only their own.
+struct ThreadLogger;
+
+impl log::Log for ThreadLogger {
+    fn enabled(&self, _: &log::Metadata<'_>) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        LOGS.with(|logs| {
+            logs.borrow_mut()
+                .push(format!("{} {}", record.level(), record.args()))
+        });
+    }
+
+    fn flush(&self) {}
+}
+
+static LOGGER: ThreadLogger = ThreadLogger;
+
+/// Starts capturing every log line written on the current thread, as
+/// `"<LEVEL> <message>"`; read them with [`captured_logs`].
+pub fn capture_logs() {
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        log::set_logger(&LOGGER).expect("no other logger in tests");
+        log::set_max_level(log::LevelFilter::Trace);
+    });
+    LOGS.with(|logs| logs.borrow_mut().clear());
+}
+
+pub fn captured_logs() -> Vec<String> {
+    LOGS.with(|logs| logs.borrow().clone())
 }

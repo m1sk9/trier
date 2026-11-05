@@ -161,17 +161,19 @@ fn recorded_default(state_path: Result<PathBuf, PathsError>) -> Option<BundleId>
 mod tests {
     use super::*;
     use crate::macos::MacosError;
-    use crate::test_support::{NO_STATE, example_path, temp_file};
+    use crate::test_support::{self, NO_STATE, example_path, temp_file};
 
     struct Run {
         ok: bool,
         launched: Vec<String>,
         alerts: Vec<String>,
+        logs: Vec<String>,
     }
 
     /// Dispatches `inputs`; the fake opener fails for host `fail.example`
     /// and for the bundle id `com.example.Broken`.
     fn run(inputs: &[&str], config: &Path, state: &Path) -> Run {
+        test_support::capture_logs();
         let mut launched = Vec::new();
         let mut alerts = Vec::new();
         let inputs: Vec<String> = inputs.iter().map(|s| (*s).to_owned()).collect();
@@ -195,6 +197,7 @@ mod tests {
             ok,
             launched,
             alerts,
+            logs: test_support::captured_logs(),
         }
     }
 
@@ -323,6 +326,7 @@ mod tests {
 
     #[test]
     fn unlocatable_state_only_loses_the_fallback() {
+        test_support::capture_logs();
         let mut launched = 0;
         let ok = dispatch(
             &["https://example.com/".to_owned()],
@@ -339,6 +343,10 @@ mod tests {
         );
         assert!(ok);
         assert_eq!(launched, 1);
+        assert!(
+            test_support::captured_logs()[0]
+                .starts_with("WARN ignoring the recorded system default")
+        );
     }
 
     #[test]
@@ -437,6 +445,37 @@ mod tests {
             r.alerts[0].starts_with("could not open file:///Users/me/report.html"),
             "{:?}",
             r.alerts
+        );
+    }
+
+    #[test]
+    fn each_routing_decision_is_logged_with_its_reason() {
+        let r = run(
+            &["https://github.com/mk-system/trier"],
+            &example_path(),
+            Path::new(NO_STATE),
+        );
+        assert_eq!(
+            r.logs,
+            [
+                "INFO https://github.com/mk-system/trier -> firefox@developer-edition (org.mozilla.firefoxdeveloperedition) by rules[0] (github.com/mk-system/**)"
+            ]
+        );
+    }
+
+    #[test]
+    fn routing_errors_and_fallbacks_are_logged() {
+        let config = temp_file("dispatch", "broken-logged.toml", "version = 2\n");
+        let state = state_with("recorded-logged.toml", "com.example.Previous");
+        let r = run(&["https://example.com/"], &config, &state);
+        assert!(
+            r.logs[0].starts_with("ERROR https://example.com/: cannot load"),
+            "{:?}",
+            r.logs
+        );
+        assert_eq!(
+            r.logs[1],
+            "INFO https://example.com/ -> com.example.Previous (recorded system default, after an error)"
         );
     }
 }

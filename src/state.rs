@@ -67,9 +67,9 @@ impl State {
         };
         let content = toml::to_string(self).expect("State always serializes");
         let tmp = path.with_extension(format!("toml.tmp.{}", std::process::id()));
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(write_err)?;
-        }
+        path.parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .map_err(write_err)?;
         std::fs::write(&tmp, content).map_err(write_err)?;
         std::fs::rename(&tmp, path).map_err(write_err)
     }
@@ -264,5 +264,17 @@ mod tests {
             state.previous_default_browser_bundle_id,
             Some(bundle_id("com.apple.Safari"))
         );
+    }
+
+    #[test]
+    fn save_reports_a_temporary_file_that_cannot_be_written() {
+        let dir = test_support::temp_dir("state").join("tmp-blocked");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("state.toml");
+        let tmp = path.with_extension(format!("toml.tmp.{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let err = State::default().save(&path).unwrap_err();
+        assert!(matches!(err, StateError::Write { .. }), "{err:?}");
+        assert!(!path.exists());
     }
 }
