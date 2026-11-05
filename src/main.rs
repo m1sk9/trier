@@ -1,9 +1,10 @@
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use trier::{cli, paths};
+use trier::{cli, macos, paths};
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -26,6 +27,14 @@ enum Command {
         /// The URL to resolve.
         url: String,
     },
+    /// Open URLs, each in the browser its rules choose.
+    Open {
+        /// The URLs to open.
+        #[arg(required = true)]
+        urls: Vec<String>,
+    },
+    /// List built-in and custom browsers and where they are installed.
+    Browsers,
     /// Manage the config file.
     Config {
         #[command(subcommand)]
@@ -49,45 +58,59 @@ fn main() -> anyhow::Result<ExitCode> {
     let args = Args::parse();
     let config_path = paths::config_path(args.config.as_deref())?;
 
-    match args.command {
+    let mut report = cli::Report::default();
+    let ok = match args.command {
         Command::Check => {
-            let ok = cli::check::run(
-                &config_path,
-                &mut std::io::stdout().lock(),
-                &mut std::io::stderr().lock(),
-            )?;
-            Ok(exit_code(ok))
+            cli::check::run(&config_path, &macos::app_path_for_bundle_id, &mut report)
         }
-        Command::Explain { url } => {
-            let ok = cli::explain::run(
-                &url,
-                &config_path,
-                paths::state_file(),
-                &mut std::io::stdout().lock(),
-                &mut std::io::stderr().lock(),
-            )?;
-            Ok(exit_code(ok))
+        Command::Explain { url } => cli::explain::run(
+            &url,
+            &config_path,
+            paths::state_file(),
+            &macos::app_path_for_bundle_id,
+            &mut report,
+        ),
+        Command::Open { urls } => cli::open::run(
+            &urls,
+            &config_path,
+            paths::state_file(),
+            &mut macos::open_url_with,
+            &mut report,
+        ),
+        Command::Browsers => {
+            cli::browsers::run(&config_path, &macos::app_path_for_bundle_id, &mut report)
         }
         Command::Config {
             command: ConfigCommand::Path,
         } => {
-            println!("{}", config_path.display());
-            Ok(ExitCode::SUCCESS)
+            report.out(config_path.display());
+            true
         }
         Command::Config {
             command: ConfigCommand::Init { force },
         } => {
             cli::config::init(&config_path, force).context("config init failed")?;
-            println!("Wrote {}", config_path.display());
-            Ok(ExitCode::SUCCESS)
+            report.out(format_args!("Wrote {}", config_path.display()));
+            true
+        }
+    };
+    // Not `?` on each stdout write: a broken pipe on stdout would drop
+    // every error and warning still to come on stderr.
+    let (mut stdout, mut stderr) = (std::io::stdout().lock(), std::io::stderr().lock());
+    let mut stdout_result = Ok(());
+    for (stream, line) in report.lines() {
+        match stream {
+            cli::Stream::Out if stdout_result.is_ok() => {
+                stdout_result = writeln!(stdout, "{line}");
+            }
+            cli::Stream::Out => {}
+            cli::Stream::Err => writeln!(stderr, "{line}")?,
         }
     }
-}
-
-fn exit_code(ok: bool) -> ExitCode {
-    if ok {
+    stdout_result?;
+    Ok(if ok {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
-    }
+    })
 }

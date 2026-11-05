@@ -1,4 +1,9 @@
 # main.rs is the binary entrypoint: argument dispatch and process wiring,
-# not unit-testable. Exclude it so coverage reflects the testable logic.
+# not unit-testable. The macOS integration modules launch apps, show alerts
+# and change the system default browser, which tests must not do.
+# Exclude them so coverage reflects the testable logic.
 ignore:
   - "src/main.rs"
+  - "src/macos.rs"
+  - "src/handler.rs"
+  - "src/register.rs"

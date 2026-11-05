@@ -65,6 +65,7 @@ fn non_empty_var(key: &str) -> Option<OsString> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::sync::{Mutex, MutexGuard};
 

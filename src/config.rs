@@ -146,6 +146,7 @@ impl std::str::FromStr for Config {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

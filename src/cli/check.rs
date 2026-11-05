@@ -1,40 +1,74 @@
-use std::io::{self, Write};
 use std::path::Path;
 
-use crate::browser::builtin_bundle_id;
-use crate::cli::report_config_error;
+use crate::browser::{BrowserName, builtin_bundle_id};
+use crate::cli::{AppLookup, Report, load_config};
 use crate::config::{Config, Rule};
 use crate::pattern::covers;
 
-/// Loads and validates the config at `path`, reporting to `out` / `err`.
+/// Loads and validates the config at `path`, reporting to `report`.
 ///
-/// Returns whether the config is valid.
-pub fn run(path: &Path, out: &mut dyn Write, err: &mut dyn Write) -> io::Result<bool> {
-    let config = match Config::load(path) {
-        Ok(config) => config,
-        Err(e) => {
-            report_config_error(path, &e, err)?;
-            return Ok(false);
-        }
+/// Returns whether the config is valid; warnings do not make it invalid.
+pub fn run(path: &Path, lookup: AppLookup, report: &mut Report) -> bool {
+    let Some(config) = load_config(path, report) else {
+        return false;
     };
 
     for (name, custom) in &config.browsers {
         if let Some(builtin) = builtin_bundle_id(name) {
-            writeln!(
-                out,
+            report.out(format_args!(
                 "info: [browsers.\"{name}\"] overrides the built-in `{name}` ({builtin} -> {})",
                 custom.bundle_id
-            )?;
+            ));
         }
     }
     for (shadowed, by) in shadowed_rules(&config.rules) {
-        writeln!(
-            out,
+        report.out(format_args!(
             "warning: rules[{shadowed}] never matches: every host is already matched by rules[{by}]"
-        )?;
+        ));
     }
-    writeln!(out, "OK: {}", path.display())?;
-    Ok(true)
+    for line in missing_browsers(&config, lookup) {
+        report.out(line);
+    }
+    report.out(format_args!("OK: {}", path.display()));
+    true
+}
+
+/// One warning per referenced browser whose app is not installed.
+///
+/// A config stays valid on a machine that lacks a browser, so this is not an
+/// error.
+fn missing_browsers(config: &Config, lookup: AppLookup) -> Vec<String> {
+    let mut references: Vec<(&BrowserName, Vec<String>)> = Vec::new();
+    let named = config
+        .default_browser
+        .iter()
+        .map(|name| (name, "default_browser".to_owned()))
+        .chain(
+            config
+                .rules
+                .iter()
+                .enumerate()
+                .map(|(i, rule)| (&rule.browser, format!("rules[{i}]"))),
+        );
+    for (name, location) in named {
+        match references.iter_mut().find(|(n, _)| *n == name) {
+            Some((_, locations)) => locations.push(location),
+            None => references.push((name, vec![location])),
+        }
+    }
+
+    let registry = config.registry();
+    references
+        .into_iter()
+        .filter_map(|(name, locations)| registry.resolve(name).map(|id| (name, id, locations)))
+        .filter(|(_, bundle_id, _)| lookup(bundle_id).is_none())
+        .map(|(name, bundle_id, locations)| {
+            format!(
+                "warning: browser `{name}` ({bundle_id}) is not installed (used by {})",
+                locations.join(", ")
+            )
+        })
+        .collect()
 }
 
 /// `(shadowed, by)` index pairs: rule `shadowed` can never match because the
@@ -61,27 +95,21 @@ fn shadowed_rules(rules: &[Rule]) -> Vec<(usize, usize)> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::path::PathBuf;
 
     use super::*;
-
-    fn example_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml.example")
-    }
+    use crate::test_support::{all_installed, example_path, lookup_installed};
 
     fn write_config(name: &str, content: &str) -> PathBuf {
         crate::test_support::temp_file("check", name, content)
     }
 
     fn check(path: &Path) -> (bool, String, String) {
-        let (mut out, mut err) = (Vec::new(), Vec::new());
-        let ok = run(path, &mut out, &mut err).unwrap();
-        (
-            ok,
-            String::from_utf8(out).unwrap(),
-            String::from_utf8(err).unwrap(),
-        )
+        let mut report = Report::default();
+        let ok = run(path, &all_installed, &mut report);
+        (ok, report.stdout(), report.stderr())
     }
 
     #[test]
@@ -184,6 +212,41 @@ mod tests {
     #[test]
     fn example_config_has_no_shadowed_rules() {
         let (_, out, _) = check(&example_path());
+        assert!(!out.contains("warning:"), "{out}");
+    }
+
+    fn check_with(path: &Path, lookup: AppLookup) -> (bool, String) {
+        let mut report = Report::default();
+        let ok = run(path, lookup, &mut report);
+        (ok, report.stdout())
+    }
+
+    const REFERENCES: &str = "version = 1\n\
+        default_browser = \"safari\"\n\
+        [[rules]]\nhosts = [\"a.example\"]\nbrowser = \"firefox\"\n\
+        [[rules]]\nhosts = [\"b.example\"]\nbrowser = \"safari\"\n";
+
+    #[test]
+    fn missing_browser_is_a_warning_listing_every_reference() {
+        let path = write_config("missing.toml", REFERENCES);
+        let (ok, out) = check_with(&path, &lookup_installed(&["org.mozilla.firefox"]));
+        assert!(ok, "a missing browser does not make the config invalid");
+        assert!(
+            out.contains(
+                "warning: browser `safari` (com.apple.Safari) is not installed (used by default_browser, rules[1])"
+            ),
+            "{out}"
+        );
+        assert_eq!(out.matches("is not installed").count(), 1, "{out}");
+    }
+
+    #[test]
+    fn installed_browsers_produce_no_warning() {
+        let path = write_config("installed.toml", REFERENCES);
+        let (_, out) = check_with(
+            &path,
+            &lookup_installed(&["org.mozilla.firefox", "com.apple.Safari"]),
+        );
         assert!(!out.contains("warning:"), "{out}");
     }
 }

@@ -160,6 +160,7 @@ pub fn builtin_bundle_id(name: &BrowserName) -> Option<&'static str> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

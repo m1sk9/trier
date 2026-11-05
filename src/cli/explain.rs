@@ -1,127 +1,63 @@
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use url::Url;
-
-use crate::browser::BundleId;
-use crate::cli::report_config_error;
-use crate::config::Config;
+use crate::cli::{AppLookup, Report, UrlResolver, load_config};
 use crate::paths::PathsError;
-use crate::resolve::{ResolveError, decide};
-use crate::state::State;
 
-/// Prints which browser `url` would open in, and why.
-///
-/// `state_path` is only consulted when no rule or `default_browser` decides,
-/// so a missing or broken state never blocks a URL the config resolves.
+/// Prints which browser `input` would open in, why, and where that app is.
 ///
 /// Returns whether a browser was decided.
 pub fn run(
     input: &str,
     config_path: &Path,
     state_path: Result<PathBuf, PathsError>,
-    out: &mut dyn Write,
-    err: &mut dyn Write,
-) -> io::Result<bool> {
-    let url = match Url::parse(input) {
-        Ok(url) => url,
-        Err(e) => {
-            writeln!(
-                err,
-                "error: invalid URL `{input}`: {e}{}",
-                scheme_hint(input)
-            )?;
-            return Ok(false);
-        }
+    lookup: AppLookup,
+    report: &mut Report,
+) -> bool {
+    let Some(config) = load_config(config_path, report) else {
+        return false;
     };
-    let config = match Config::load(config_path) {
-        Ok(config) => config,
-        Err(e) => {
-            report_config_error(config_path, &e, err)?;
-            return Ok(false);
-        }
-    };
-
-    let registry = config.registry();
-    let decision = match decide(&url, &config, &registry, None) {
-        Err(ResolveError::NoFallback(_)) => {
-            let recorded = recorded_default(state_path, err)?;
-            decide(&url, &config, &registry, recorded.as_ref())
-        }
-        other => other,
-    };
-    match decision {
+    match UrlResolver::new(&config, state_path).resolve(input, report) {
         Ok(decision) => {
-            writeln!(out, "{decision}")?;
-            Ok(true)
+            report.out(&decision);
+            match lookup(&decision.bundle_id) {
+                Some(path) => report.out(format_args!("app:       {}", path.display())),
+                None => report.out(format_args!("app:       not installed")),
+            }
+            true
         }
-        Err(e @ ResolveError::UnsupportedScheme(_)) if url.cannot_be_a_base() => {
-            writeln!(err, "error: {e}{}", scheme_hint(input))?;
-            Ok(false)
+        Err(message) => {
+            report.err(format_args!("error: {message}"));
+            false
         }
-        Err(e) => {
-            writeln!(err, "error: {e}")?;
-            Ok(false)
-        }
-    }
-}
-
-/// The recorded system default, or `None` with a warning when the state
-/// cannot be located or read.
-fn recorded_default(
-    state_path: Result<PathBuf, PathsError>,
-    err: &mut dyn Write,
-) -> io::Result<Option<BundleId>> {
-    let state = state_path
-        .map_err(|e| e.to_string())
-        .and_then(|path| State::load(&path).map_err(|e| e.to_string()));
-    match state {
-        Ok(state) => Ok(state.previous_default_browser_bundle_id),
-        Err(e) => {
-            writeln!(err, "warning: ignoring the recorded system default: {e}")?;
-            Ok(None)
-        }
-    }
-}
-
-/// Suggests `https://` for input that looks like a bare host, such as
-/// `github.com` or `localhost:3000`.
-fn scheme_hint(input: &str) -> String {
-    let looks_like_host = !input.contains("://")
-        && Url::parse(&format!("https://{input}"))
-            .is_ok_and(|url| url.username().is_empty() && url.password().is_none());
-    if looks_like_host {
-        format!(" (did you mean `https://{input}`?)")
-    } else {
-        String::new()
     }
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::path::PathBuf;
 
     use super::*;
-
-    fn example_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml.example")
-    }
+    use crate::test_support::{NO_STATE, example_path, lookup_installed};
 
     fn temp_file(name: &str, content: &str) -> PathBuf {
         crate::test_support::temp_file("explain", name, content)
     }
 
     fn explain(url: &str, config: &Path, state: &Path) -> (bool, String, String) {
-        let (mut out, mut err) = (Vec::new(), Vec::new());
-        let ok = run(url, config, Ok(state.to_owned()), &mut out, &mut err).unwrap();
-        (
-            ok,
-            String::from_utf8(out).unwrap(),
-            String::from_utf8(err).unwrap(),
-        )
+        explain_with(url, config, state, &lookup_installed(&[]))
     }
 
-    const NO_STATE: &str = "/nonexistent/trier/state.toml";
+    fn explain_with(
+        url: &str,
+        config: &Path,
+        state: &Path,
+        lookup: AppLookup,
+    ) -> (bool, String, String) {
+        let mut report = Report::default();
+        let ok = run(url, config, Ok(state.to_owned()), lookup, &mut report);
+        (ok, report.stdout(), report.stderr())
+    }
 
     #[test]
     fn prints_matched_rule_and_browser() {
@@ -215,7 +151,7 @@ mod tests {
 
     #[test]
     fn unlocatable_state_dir_does_not_block_a_rule() {
-        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let mut report = Report::default();
         let no_home = Err(PathsError::NoHome {
             what: "state",
             xdg_var: "XDG_STATE_HOME",
@@ -224,23 +160,28 @@ mod tests {
             "https://github.com/mk-system/trier",
             &example_path(),
             no_home,
-            &mut out,
-            &mut err,
-        )
-        .unwrap();
+            &lookup_installed(&[]),
+            &mut report,
+        );
         assert!(ok);
     }
 
     #[test]
     fn unlocatable_state_dir_is_a_warning_when_the_fallback_is_needed() {
         let config = temp_file("no-default-no-home.toml", "version = 1\n");
-        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let mut report = Report::default();
         let no_home = Err(PathsError::NoHome {
             what: "state",
             xdg_var: "XDG_STATE_HOME",
         });
-        let ok = run("https://example.com/", &config, no_home, &mut out, &mut err).unwrap();
-        let err = String::from_utf8(err).unwrap();
+        let ok = run(
+            "https://example.com/",
+            &config,
+            no_home,
+            &lookup_installed(&[]),
+            &mut report,
+        );
+        let err = report.stderr();
         assert!(!ok);
         assert!(
             err.contains(
@@ -270,5 +211,31 @@ mod tests {
             Path::new(NO_STATE),
         );
         assert!(!err.contains("did you mean"), "{err}");
+    }
+
+    #[test]
+    fn prints_install_path_of_the_chosen_app() {
+        let (_, out, _) = explain_with(
+            "https://example.com/",
+            &example_path(),
+            Path::new(NO_STATE),
+            &lookup_installed(&["com.apple.Safari"]),
+        );
+        assert!(
+            out.ends_with("app:       /Applications/com.apple.Safari.app\n"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn reports_a_chosen_app_that_is_not_installed() {
+        let (ok, out, _) = explain_with(
+            "https://example.com/",
+            &example_path(),
+            Path::new(NO_STATE),
+            &lookup_installed(&[]),
+        );
+        assert!(ok);
+        assert!(out.ends_with("app:       not installed\n"), "{out}");
     }
 }
