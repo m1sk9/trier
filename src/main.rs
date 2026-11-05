@@ -83,19 +83,31 @@ fn main() -> anyhow::Result<ExitCode> {
         Command::Config {
             command: ConfigCommand::Path,
         } => {
-            println!("{}", config_path.display());
+            report.out(config_path.display());
             true
         }
         Command::Config {
             command: ConfigCommand::Init { force },
         } => {
             cli::config::init(&config_path, force).context("config init failed")?;
-            println!("Wrote {}", config_path.display());
+            report.out(format_args!("Wrote {}", config_path.display()));
             true
         }
     };
-    std::io::stdout().write_all(report.stdout.as_bytes())?;
-    std::io::stderr().write_all(report.stderr.as_bytes())?;
+    // Not `?` on each stdout write: a broken pipe on stdout would drop
+    // every error and warning still to come on stderr.
+    let (mut stdout, mut stderr) = (std::io::stdout().lock(), std::io::stderr().lock());
+    let mut stdout_result = Ok(());
+    for (stream, line) in report.lines() {
+        match stream {
+            cli::Stream::Out if stdout_result.is_ok() => {
+                stdout_result = writeln!(stdout, "{line}");
+            }
+            cli::Stream::Out => {}
+            cli::Stream::Err => writeln!(stderr, "{line}")?,
+        }
+    }
+    stdout_result?;
     Ok(if ok {
         ExitCode::SUCCESS
     } else {

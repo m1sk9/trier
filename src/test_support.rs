@@ -2,6 +2,14 @@ use std::path::{Path, PathBuf};
 
 use crate::browser::BundleId;
 
+/// A state file path that never exists.
+pub const NO_STATE: &str = "/nonexistent/trier/state.toml";
+
+/// The example config shipped with the crate.
+pub fn example_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml.example")
+}
+
 /// A per-module scratch directory under `target/tmp`.
 pub fn temp_dir(module: &str) -> PathBuf {
     // Not `std::env::temp_dir()`: it reads TMPDIR at runtime, racing with

@@ -23,25 +23,51 @@ pub mod open;
 /// `main.rs` passes [`crate::macos::app_path_for_bundle_id`].
 pub type AppLookup<'a> = &'a dyn Fn(&BundleId) -> Option<PathBuf>;
 
-/// What a subcommand prints.
+/// Which stream a [`Report`] line goes to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stream {
+    Out,
+    Err,
+}
+
+/// What a subcommand prints, in the order it was produced.
 ///
 /// Appending to it cannot fail, so subcommands carry no I/O error paths;
 /// `main.rs` writes it out once the command finishes.
 #[derive(Debug, Default)]
 pub struct Report {
-    pub stdout: String,
-    pub stderr: String,
+    lines: Vec<(Stream, String)>,
 }
 
 impl Report {
     pub fn out(&mut self, line: impl fmt::Display) {
-        self.stdout.push_str(&line.to_string());
-        self.stdout.push('\n');
+        self.lines.push((Stream::Out, line.to_string()));
     }
 
     pub fn err(&mut self, line: impl fmt::Display) {
-        self.stderr.push_str(&line.to_string());
-        self.stderr.push('\n');
+        self.lines.push((Stream::Err, line.to_string()));
+    }
+
+    pub fn lines(&self) -> &[(Stream, String)] {
+        &self.lines
+    }
+
+    /// Everything written to stdout, one line each.
+    pub fn stdout(&self) -> String {
+        self.joined(Stream::Out)
+    }
+
+    /// Everything written to stderr, one line each.
+    pub fn stderr(&self) -> String {
+        self.joined(Stream::Err)
+    }
+
+    fn joined(&self, stream: Stream) -> String {
+        self.lines
+            .iter()
+            .filter(|(s, _)| *s == stream)
+            .map(|(_, line)| format!("{line}\n"))
+            .collect()
     }
 }
 
@@ -73,7 +99,7 @@ pub fn report_config_error(path: &Path, e: &ConfigError, report: &mut Report) {
 pub struct UrlResolver<'a> {
     config: &'a Config,
     registry: BrowserRegistry,
-    state_path: Option<Result<PathBuf, PathsError>>,
+    state_path: Result<PathBuf, PathsError>,
     recorded_default: Option<Option<BundleId>>,
 }
 
@@ -82,7 +108,7 @@ impl<'a> UrlResolver<'a> {
         Self {
             config,
             registry: config.registry(),
-            state_path: Some(state_path),
+            state_path,
             recorded_default: None,
         }
     }
@@ -118,10 +144,9 @@ impl<'a> UrlResolver<'a> {
         }
         let state = self
             .state_path
-            .take()
-            .expect("state path is consumed only once")
-            .map_err(|e| e.to_string())
-            .and_then(|path| State::load(&path).map_err(|e| e.to_string()));
+            .as_ref()
+            .map_err(ToString::to_string)
+            .and_then(|path| State::load(path).map_err(|e| e.to_string()));
         let recorded = match state {
             Ok(state) => state.previous_default_browser_bundle_id,
             Err(e) => {
@@ -146,5 +171,29 @@ fn scheme_hint(input: &str) -> String {
         format!(" (did you mean `https://{input}`?)")
     } else {
         String::new()
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn report_keeps_lines_in_the_order_they_were_produced() {
+        let mut report = Report::default();
+        report.out("a");
+        report.err("b");
+        report.out("c");
+        assert_eq!(
+            report.lines(),
+            [
+                (Stream::Out, "a".to_owned()),
+                (Stream::Err, "b".to_owned()),
+                (Stream::Out, "c".to_owned()),
+            ]
+        );
+        assert_eq!(report.stdout(), "a\nc\n");
+        assert_eq!(report.stderr(), "b\n");
     }
 }

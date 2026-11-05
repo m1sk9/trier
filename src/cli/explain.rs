@@ -38,11 +38,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::test_support::lookup_installed;
-
-    fn example_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml.example")
-    }
+    use crate::test_support::{NO_STATE, example_path, lookup_installed};
 
     fn temp_file(name: &str, content: &str) -> PathBuf {
         crate::test_support::temp_file("explain", name, content)
@@ -60,10 +56,8 @@ mod tests {
     ) -> (bool, String, String) {
         let mut report = Report::default();
         let ok = run(url, config, Ok(state.to_owned()), lookup, &mut report);
-        (ok, report.stdout, report.stderr)
+        (ok, report.stdout(), report.stderr())
     }
-
-    const NO_STATE: &str = "/nonexistent/trier/state.toml";
 
     #[test]
     fn prints_matched_rule_and_browser() {
@@ -187,7 +181,7 @@ mod tests {
             &lookup_installed(&[]),
             &mut report,
         );
-        let err = report.stderr;
+        let err = report.stderr();
         assert!(!ok);
         assert!(
             err.contains(

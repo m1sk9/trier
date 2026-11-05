@@ -60,13 +60,8 @@ pub fn run(
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use crate::test_support::temp_file;
-
-    const NO_STATE: &str = "/nonexistent/trier/state.toml";
-
-    fn example_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml.example")
-    }
+    use crate::cli::Stream;
+    use crate::test_support::{NO_STATE, example_path, temp_file};
 
     /// Runs `open`, recording what would have been launched; URLs whose
     /// host is `fail.example` make the fake opener fail.
@@ -91,7 +86,7 @@ mod tests {
             &mut opener,
             &mut report,
         );
-        (ok, launched, report.stdout, report.stderr)
+        (ok, launched, report.stdout(), report.stderr())
     }
 
     #[test]
@@ -185,5 +180,24 @@ mod tests {
         assert!(!ok);
         assert!(launched.is_empty());
         assert!(err.contains("unsupported config version 2"), "{err}");
+    }
+
+    #[test]
+    fn errors_stay_in_order_with_results() {
+        let inputs = [
+            "https://example.com/a".to_owned(),
+            "mailto:me@example.com".to_owned(),
+            "https://example.com/b".to_owned(),
+        ];
+        let mut report = Report::default();
+        run(
+            &inputs,
+            &example_path(),
+            Ok(PathBuf::from(NO_STATE)),
+            &mut |_: &BundleId, _: &Url| Ok(()),
+            &mut report,
+        );
+        let streams: Vec<Stream> = report.lines().iter().map(|(s, _)| *s).collect();
+        assert_eq!(streams, [Stream::Out, Stream::Err, Stream::Out]);
     }
 }

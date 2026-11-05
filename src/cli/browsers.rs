@@ -1,16 +1,32 @@
+use std::collections::BTreeMap;
+use std::io;
 use std::path::Path;
 
-use crate::browser::Origin;
-use crate::cli::{AppLookup, Report, load_config};
+use crate::browser::{BrowserRegistry, Origin};
+use crate::cli::{AppLookup, Report, report_config_error};
+use crate::config::{Config, ConfigError};
 
 /// Prints every known browser: name, origin, bundle id and install path.
 ///
-/// Returns whether the config could be loaded.
+/// Without a config file only the built-in browsers are listed, so their
+/// names can be looked up before writing one. Returns `false` only when an
+/// existing config cannot be used.
 pub fn run(config_path: &Path, lookup: AppLookup, report: &mut Report) -> bool {
-    let Some(config) = load_config(config_path, report) else {
-        return false;
+    let custom = match Config::load(config_path) {
+        Ok(config) => config.browsers,
+        Err(ConfigError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
+            report.err(format_args!(
+                "info: no config at {}; listing built-in browsers only",
+                config_path.display()
+            ));
+            BTreeMap::new()
+        }
+        Err(e) => {
+            report_config_error(config_path, &e, report);
+            return false;
+        }
     };
-    let registry = config.registry();
+    let registry = BrowserRegistry::new(&custom);
     let rows: Vec<[String; 4]> = registry
         .iter()
         .map(|(name, bundle_id, origin)| {
@@ -60,7 +76,7 @@ mod tests {
     fn browsers(config: &Path, lookup: AppLookup) -> (bool, String, String) {
         let mut report = Report::default();
         let ok = run(config, lookup, &mut report);
-        (ok, report.stdout, report.stderr)
+        (ok, report.stdout(), report.stderr())
     }
 
     /// `name` must be unique per test: tests run in parallel and would
@@ -139,5 +155,24 @@ mod tests {
         let (ok, _, err) = browsers(&config, &lookup_installed(&[]));
         assert!(!ok);
         assert!(err.contains("unsupported config version 2"), "{err}");
+    }
+
+    #[test]
+    fn missing_config_lists_builtin_browsers_only() {
+        let (ok, out, err) = browsers(
+            Path::new("/nonexistent/trier/config.toml"),
+            &lookup_installed(&[]),
+        );
+        assert!(ok);
+        assert!(
+            err.contains("info: no config at /nonexistent/trier/config.toml"),
+            "{err}"
+        );
+        assert_eq!(
+            out.lines().count(),
+            1 + crate::browser::BUILTIN.len(),
+            "{out}"
+        );
+        assert!(row(&out, "safari").contains(&"built-in"));
     }
 }

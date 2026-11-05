@@ -5,7 +5,7 @@ use crate::cli::{AppLookup, Report, load_config};
 use crate::config::{Config, Rule};
 use crate::pattern::covers;
 
-/// Loads and validates the config at `path`, reporting to `out` / `err`.
+/// Loads and validates the config at `path`, reporting to `report`.
 ///
 /// Returns whether the config is valid; warnings do not make it invalid.
 pub fn run(path: &Path, lookup: AppLookup, report: &mut Report) -> bool {
@@ -100,11 +100,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::test_support::{all_installed, lookup_installed};
-
-    fn example_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml.example")
-    }
+    use crate::test_support::{all_installed, example_path, lookup_installed};
 
     fn write_config(name: &str, content: &str) -> PathBuf {
         crate::test_support::temp_file("check", name, content)
@@ -113,7 +109,7 @@ mod tests {
     fn check(path: &Path) -> (bool, String, String) {
         let mut report = Report::default();
         let ok = run(path, &all_installed, &mut report);
-        (ok, report.stdout, report.stderr)
+        (ok, report.stdout(), report.stderr())
     }
 
     #[test]
@@ -222,7 +218,7 @@ mod tests {
     fn check_with(path: &Path, lookup: AppLookup) -> (bool, String) {
         let mut report = Report::default();
         let ok = run(path, lookup, &mut report);
-        (ok, report.stdout)
+        (ok, report.stdout())
     }
 
     const REFERENCES: &str = "version = 1\n\
