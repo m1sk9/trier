@@ -232,6 +232,25 @@ mod tests {
     }
 
     #[test]
+    fn unlocatable_state_dir_is_a_warning_when_the_fallback_is_needed() {
+        let config = temp_file("no-default-no-home.toml", "version = 1\n");
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let no_home = Err(PathsError::NoHome {
+            what: "state",
+            xdg_var: "XDG_STATE_HOME",
+        });
+        let ok = run("https://example.com/", &config, no_home, &mut out, &mut err).unwrap();
+        let err = String::from_utf8(err).unwrap();
+        assert!(!ok);
+        assert!(
+            err.contains(
+                "warning: ignoring the recorded system default: cannot locate the state directory"
+            ),
+            "{err}"
+        );
+    }
+
+    #[test]
     fn bare_host_input_suggests_https() {
         for input in ["github.com", "localhost:3000"] {
             let (ok, _, err) = explain(input, &example_path(), Path::new(NO_STATE));
