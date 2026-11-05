@@ -1,7 +1,9 @@
 {
+  "last-release-sha": "bb841606525281efd3631be83388b26b17633dc9",
   "packages": {
     ".": {
       "release-type": "rust",
+      "include-component-in-tag": false,
       "bump-minor-pre-major": true,
       "changelog-sections": [
         { "type": "feat", "section": "Features" },
