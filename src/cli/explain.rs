@@ -1,99 +1,39 @@
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use url::Url;
-
-use crate::browser::BundleId;
-use crate::cli::report_config_error;
-use crate::config::Config;
+use crate::cli::{AppLookup, UrlResolver, load_config};
 use crate::paths::PathsError;
-use crate::resolve::{ResolveError, decide};
-use crate::state::State;
 
-/// Prints which browser `url` would open in, and why.
-///
-/// `state_path` is only consulted when no rule or `default_browser` decides,
-/// so a missing or broken state never blocks a URL the config resolves.
+/// Prints which browser `input` would open in, why, and where that app is.
 ///
 /// Returns whether a browser was decided.
 pub fn run(
     input: &str,
     config_path: &Path,
     state_path: Result<PathBuf, PathsError>,
+    lookup: AppLookup,
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> io::Result<bool> {
-    let url = match Url::parse(input) {
-        Ok(url) => url,
-        Err(e) => {
-            writeln!(
-                err,
-                "error: invalid URL `{input}`: {e}{}",
-                scheme_hint(input)
-            )?;
-            return Ok(false);
-        }
+    let Some(config) = load_config(config_path, err)? else {
+        return Ok(false);
     };
-    let config = match Config::load(config_path) {
-        Ok(config) => config,
-        Err(e) => {
-            report_config_error(config_path, &e, err)?;
-            return Ok(false);
-        }
-    };
-
-    let registry = config.registry();
-    let decision = match decide(&url, &config, &registry, None) {
-        Err(ResolveError::NoFallback(_)) => {
-            let recorded = recorded_default(state_path, err)?;
-            decide(&url, &config, &registry, recorded.as_ref())
-        }
-        other => other,
-    };
-    match decision {
+    match UrlResolver::new(&config, state_path).resolve(input, err)? {
         Ok(decision) => {
             writeln!(out, "{decision}")?;
+            // An unsupported lookup (off macOS) omits the line rather than
+            // claiming the app is missing.
+            match lookup(&decision.bundle_id) {
+                Ok(Some(path)) => writeln!(out, "app:       {}", path.display())?,
+                Ok(None) => writeln!(out, "app:       not installed")?,
+                Err(_) => {}
+            }
             Ok(true)
         }
-        Err(e @ ResolveError::UnsupportedScheme(_)) if url.cannot_be_a_base() => {
-            writeln!(err, "error: {e}{}", scheme_hint(input))?;
+        Err(message) => {
+            writeln!(err, "error: {message}")?;
             Ok(false)
         }
-        Err(e) => {
-            writeln!(err, "error: {e}")?;
-            Ok(false)
-        }
-    }
-}
-
-/// The recorded system default, or `None` with a warning when the state
-/// cannot be located or read.
-fn recorded_default(
-    state_path: Result<PathBuf, PathsError>,
-    err: &mut dyn Write,
-) -> io::Result<Option<BundleId>> {
-    let state = state_path
-        .map_err(|e| e.to_string())
-        .and_then(|path| State::load(&path).map_err(|e| e.to_string()));
-    match state {
-        Ok(state) => Ok(state.previous_default_browser_bundle_id),
-        Err(e) => {
-            writeln!(err, "warning: ignoring the recorded system default: {e}")?;
-            Ok(None)
-        }
-    }
-}
-
-/// Suggests `https://` for input that looks like a bare host, such as
-/// `github.com` or `localhost:3000`.
-fn scheme_hint(input: &str) -> String {
-    let looks_like_host = !input.contains("://")
-        && Url::parse(&format!("https://{input}"))
-            .is_ok_and(|url| url.username().is_empty() && url.password().is_none());
-    if looks_like_host {
-        format!(" (did you mean `https://{input}`?)")
-    } else {
-        String::new()
     }
 }
 
@@ -102,6 +42,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::test_support::{lookup_installed, unsupported_lookup};
 
     fn example_path() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml.example")
@@ -112,8 +53,25 @@ mod tests {
     }
 
     fn explain(url: &str, config: &Path, state: &Path) -> (bool, String, String) {
+        explain_with(url, config, state, &unsupported_lookup)
+    }
+
+    fn explain_with(
+        url: &str,
+        config: &Path,
+        state: &Path,
+        lookup: AppLookup,
+    ) -> (bool, String, String) {
         let (mut out, mut err) = (Vec::new(), Vec::new());
-        let ok = run(url, config, Ok(state.to_owned()), &mut out, &mut err).unwrap();
+        let ok = run(
+            url,
+            config,
+            Ok(state.to_owned()),
+            lookup,
+            &mut out,
+            &mut err,
+        )
+        .unwrap();
         (
             ok,
             String::from_utf8(out).unwrap(),
@@ -224,6 +182,7 @@ mod tests {
             "https://github.com/mk-system/trier",
             &example_path(),
             no_home,
+            &unsupported_lookup,
             &mut out,
             &mut err,
         )
@@ -239,7 +198,15 @@ mod tests {
             what: "state",
             xdg_var: "XDG_STATE_HOME",
         });
-        let ok = run("https://example.com/", &config, no_home, &mut out, &mut err).unwrap();
+        let ok = run(
+            "https://example.com/",
+            &config,
+            no_home,
+            &unsupported_lookup,
+            &mut out,
+            &mut err,
+        )
+        .unwrap();
         let err = String::from_utf8(err).unwrap();
         assert!(!ok);
         assert!(
@@ -270,5 +237,37 @@ mod tests {
             Path::new(NO_STATE),
         );
         assert!(!err.contains("did you mean"), "{err}");
+    }
+
+    #[test]
+    fn prints_install_path_of_the_chosen_app() {
+        let (_, out, _) = explain_with(
+            "https://example.com/",
+            &example_path(),
+            Path::new(NO_STATE),
+            &lookup_installed(&["com.apple.Safari"]),
+        );
+        assert!(
+            out.ends_with("app:       /Applications/com.apple.Safari.app\n"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn reports_a_chosen_app_that_is_not_installed() {
+        let (ok, out, _) = explain_with(
+            "https://example.com/",
+            &example_path(),
+            Path::new(NO_STATE),
+            &lookup_installed(&[]),
+        );
+        assert!(ok);
+        assert!(out.ends_with("app:       not installed\n"), "{out}");
+    }
+
+    #[test]
+    fn omits_the_app_line_when_lookup_is_unsupported() {
+        let (_, out, _) = explain("https://example.com/", &example_path(), Path::new(NO_STATE));
+        assert!(!out.contains("app:"), "{out}");
     }
 }

@@ -210,3 +210,27 @@ fn explain_rejects_unsupported_scheme_with_exit_1() {
         .clone();
     assert!(stderr(&output).contains("unsupported URL scheme `mailto`"));
 }
+
+#[test]
+fn browsers_lists_builtin_and_custom_entries() {
+    let home = test_dir("browsers");
+    let output = trier(&home)
+        .args(["browsers", "--config"])
+        .arg(example_path())
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let out = stdout(&output);
+    let row = |name: &str| {
+        out.lines()
+            .find(|l| l.split_whitespace().next() == Some(name))
+            .unwrap_or_else(|| panic!("no row for {name} in\n{out}"))
+            .to_owned()
+    };
+    assert!(row("firefox@dev").contains("custom"), "{out}");
+    assert!(row("safari").contains("built-in"), "{out}");
+    if cfg!(target_os = "macos") {
+        assert!(row("safari").trim_end().ends_with("Safari.app"), "{out}");
+    }
+}

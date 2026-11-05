@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use trier::{cli, paths};
+use trier::{cli, macos, paths};
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -26,6 +26,14 @@ enum Command {
         /// The URL to resolve.
         url: String,
     },
+    /// Open URLs, each in the browser its rules choose.
+    Open {
+        /// The URLs to open.
+        #[arg(required = true)]
+        urls: Vec<String>,
+    },
+    /// List built-in and custom browsers and where they are installed.
+    Browsers,
     /// Manage the config file.
     Config {
         #[command(subcommand)]
@@ -53,6 +61,7 @@ fn main() -> anyhow::Result<ExitCode> {
         Command::Check => {
             let ok = cli::check::run(
                 &config_path,
+                &macos::app_path_for_bundle_id,
                 &mut std::io::stdout().lock(),
                 &mut std::io::stderr().lock(),
             )?;
@@ -63,6 +72,27 @@ fn main() -> anyhow::Result<ExitCode> {
                 &url,
                 &config_path,
                 paths::state_file(),
+                &macos::app_path_for_bundle_id,
+                &mut std::io::stdout().lock(),
+                &mut std::io::stderr().lock(),
+            )?;
+            Ok(exit_code(ok))
+        }
+        Command::Open { urls } => {
+            let ok = cli::open::run(
+                &urls,
+                &config_path,
+                paths::state_file(),
+                &mut macos::open_url_with,
+                &mut std::io::stdout().lock(),
+                &mut std::io::stderr().lock(),
+            )?;
+            Ok(exit_code(ok))
+        }
+        Command::Browsers => {
+            let ok = cli::browsers::run(
+                &config_path,
+                &macos::app_path_for_bundle_id,
                 &mut std::io::stdout().lock(),
                 &mut std::io::stderr().lock(),
             )?;
