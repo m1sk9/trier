@@ -218,10 +218,23 @@ warning: rules[1] never matches: every host is already matched by rules[0]
 | `register`    | `trier register`                                    | Generate `~/Applications/Trier.app` and make it the default browser.                      |
 | `unregister`  | `trier unregister`                                  | Restore the previous default browser and remove `Trier.app`.                              |
 | `status`      | `trier status`                                      | Show the config, the bundle, the registered version and the current default browser.      |
+| `skill`       | `trier skill`                                       | Install usage notes for LLM coding agents (`--agent claude\|agents`, `--path <DIR>`, `--force`). |
 | `config path` | `trier config path`                                 | Print the config file path in effect.                                                     |
 | `config init` | `trier config init`                                 | Write the example config there (`--force` to overwrite).                                  |
 
-Every command accepts `--config <PATH>`. `trier --help` lists them all.
+Every command accepts `--config <PATH>`.
+
+### Skill for LLM coding agents
+
+`trier skill` writes a short guide to trier's config and commands as an [Agent Skills](https://agentskills.io) `SKILL.md`, so coding agents can edit your config correctly:
+
+| Command                             | Writes to                                                         |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| `trier skill`                       | `~/.claude/skills/trier/SKILL.md` (`$CLAUDE_CONFIG_DIR` if set)   |
+| `trier skill --agent agents`        | `~/.agents/skills/trier/SKILL.md` (Codex and others)              |
+| `trier skill --path <DIR>`          | `<DIR>/SKILL.md`, for any agent that reads skills from elsewhere  |
+
+The skill is embedded in the binary, so it matches the installed version; run `trier skill --force` after an upgrade to refresh it. `trier --help` lists them all.
 
 ## How it works
 

@@ -1,6 +1,8 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use super::WriteError;
+
 pub const EXAMPLE: &str = include_str!("../../config/config.toml.example");
 
 #[derive(Debug, thiserror::Error)]
@@ -15,30 +17,13 @@ pub enum InitError {
 
 /// Writes the example config to `path`, creating parent directories.
 pub fn init(path: &Path, force: bool) -> Result<(), InitError> {
-    let io_err = |source| InitError::Io {
-        path: path.to_owned(),
-        source,
-    };
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(io_err)?;
-    }
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true);
-    // `create_new` instead of an `exists()` check so a file appearing in
-    // between is never clobbered.
-    if force {
-        options.create(true).truncate(true);
-    } else {
-        options.create_new(true);
-    }
-    let mut file = options.open(path).map_err(|e| {
-        if e.kind() == io::ErrorKind::AlreadyExists {
-            InitError::AlreadyExists(path.to_owned())
-        } else {
-            io_err(e)
-        }
-    })?;
-    io::Write::write_all(&mut file, EXAMPLE.as_bytes()).map_err(io_err)
+    super::write_text(path, EXAMPLE, force).map_err(|e| match e {
+        WriteError::AlreadyExists => InitError::AlreadyExists(path.to_owned()),
+        WriteError::Io(source) => InitError::Io {
+            path: path.to_owned(),
+            source,
+        },
+    })
 }
 
 #[cfg(test)]

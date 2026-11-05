@@ -18,6 +18,7 @@ pub mod config;
 pub mod explain;
 pub mod open;
 pub mod register;
+pub mod skill;
 pub mod status;
 pub mod unregister;
 
@@ -97,6 +98,37 @@ impl Report {
             .map(|(_, line)| format!("{line}\n"))
             .collect()
     }
+}
+
+/// Writes `content` to `path`, creating parent directories.
+///
+/// Without `force` the file must not exist. `create_new` instead of an
+/// `exists()` check so a file appearing in between is never clobbered.
+pub(crate) fn write_text(path: &Path, content: &str, force: bool) -> Result<(), WriteError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(WriteError::Io)?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true);
+    if force {
+        options.create(true).truncate(true);
+    } else {
+        options.create_new(true);
+    }
+    let mut file = options.open(path).map_err(|e| {
+        if e.kind() == io::ErrorKind::AlreadyExists {
+            WriteError::AlreadyExists
+        } else {
+            WriteError::Io(e)
+        }
+    })?;
+    file.write_all(content.as_bytes()).map_err(WriteError::Io)
+}
+
+#[derive(Debug)]
+pub(crate) enum WriteError {
+    AlreadyExists,
+    Io(io::Error),
 }
 
 /// Loads the config, reporting `error:` lines and returning `None` on failure.

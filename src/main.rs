@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::Context;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use trier::{cli, handler, macos, paths, register};
 
 #[derive(Debug, Parser)]
@@ -41,11 +41,40 @@ enum Command {
     Unregister,
     /// Show the config, the bundle and whether trier is the default browser.
     Status,
+    /// Install the trier skill (usage notes for LLM coding agents).
+    Skill {
+        /// Whose skills directory to install into.
+        #[arg(long, value_enum, default_value_t = AgentArg::Claude, conflicts_with = "path")]
+        agent: AgentArg,
+        /// Install into this directory instead (SKILL.md is written directly inside it).
+        #[arg(long, value_name = "DIR")]
+        path: Option<PathBuf>,
+        /// Overwrite an existing SKILL.md.
+        #[arg(long)]
+        force: bool,
+    },
     /// Manage the config file.
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum AgentArg {
+    /// Claude Code: ~/.claude/skills/trier (or $CLAUDE_CONFIG_DIR/skills/trier).
+    Claude,
+    /// The shared ~/.agents/skills/trier directory, read by Codex and others.
+    Agents,
+}
+
+impl From<AgentArg> for cli::skill::Agent {
+    fn from(arg: AgentArg) -> Self {
+        match arg {
+            AgentArg::Claude => Self::Claude,
+            AgentArg::Agents => Self::Agents,
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -107,6 +136,22 @@ fn main() -> anyhow::Result<ExitCode> {
             },
             &mut report,
         ),
+        Command::Skill { agent, path, force } => {
+            let dir = match path {
+                Some(dir) => dir,
+                None => cli::skill::default_dir(
+                    agent.into(),
+                    paths::home_dir().as_deref(),
+                    std::env::var_os("CLAUDE_CONFIG_DIR")
+                        .filter(|v| !v.is_empty())
+                        .map(PathBuf::from)
+                        .as_deref(),
+                )?,
+            };
+            let written = cli::skill::install(&dir, force).context("skill install failed")?;
+            report.out(format_args!("Wrote {}", written.display()));
+            true
+        }
         Command::Config {
             command: ConfigCommand::Path,
         } => {

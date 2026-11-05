@@ -261,3 +261,92 @@ fn status_reports_an_unregistered_install() {
         "{out}"
     );
 }
+
+const SKILL: &str = include_str!("../skills/trier/SKILL.md");
+
+#[test]
+fn skill_installs_for_claude_under_home() {
+    let home = test_dir("skill-claude");
+    trier(&home)
+        .env_remove("CLAUDE_CONFIG_DIR")
+        .arg("skill")
+        .assert()
+        .success();
+    let path = home.join(".claude/skills/trier/SKILL.md");
+    assert_eq!(std::fs::read_to_string(path).unwrap(), SKILL);
+}
+
+#[test]
+fn skill_honors_claude_config_dir() {
+    let home = test_dir("skill-claude-dir");
+    let cfg = home.join("claude-cfg");
+    trier(&home)
+        .env("CLAUDE_CONFIG_DIR", &cfg)
+        .arg("skill")
+        .assert()
+        .success();
+    assert!(cfg.join("skills/trier/SKILL.md").is_file());
+}
+
+#[test]
+fn skill_installs_for_shared_agents_dir() {
+    let home = test_dir("skill-agents");
+    trier(&home)
+        .args(["skill", "--agent", "agents"])
+        .assert()
+        .success();
+    assert!(home.join(".agents/skills/trier/SKILL.md").is_file());
+}
+
+#[test]
+fn skill_path_writes_directly_into_the_directory() {
+    let home = test_dir("skill-path");
+    let dir = home.join("custom/trier");
+    trier(&home)
+        .args(["skill", "--path"])
+        .arg(&dir)
+        .assert()
+        .success();
+    assert_eq!(
+        std::fs::read_to_string(dir.join("SKILL.md")).unwrap(),
+        SKILL
+    );
+}
+
+#[test]
+fn skill_refuses_to_overwrite_without_force() {
+    let home = test_dir("skill-refuse");
+    let dir = home.join("trier");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("SKILL.md"), "user edits").unwrap();
+    let output = trier(&home)
+        .args(["skill", "--path"])
+        .arg(&dir)
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+    assert!(stderr(&output).contains("--force"), "{}", stderr(&output));
+    assert_eq!(
+        std::fs::read_to_string(dir.join("SKILL.md")).unwrap(),
+        "user edits"
+    );
+    trier(&home)
+        .args(["skill", "--force", "--path"])
+        .arg(&dir)
+        .assert()
+        .success();
+    assert_eq!(
+        std::fs::read_to_string(dir.join("SKILL.md")).unwrap(),
+        SKILL
+    );
+}
+
+#[test]
+fn skill_rejects_agent_together_with_path() {
+    let home = test_dir("skill-conflict");
+    trier(&home)
+        .args(["skill", "--agent", "agents", "--path", "x"])
+        .assert()
+        .failure();
+}
