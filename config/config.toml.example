@@ -14,8 +14,10 @@ version = 1
 # Browser used when no rule matches. Optional.
 # Any built-in name or a name defined under [browsers].
 # Built-in names are Homebrew cask tokens:
-#   firefox, firefox@developer-edition, firefox@nightly,
-#   google-chrome, google-chrome@dev, tor-browser, safari
+#   brave-browser, firefox, firefox@developer-edition, firefox@nightly,
+#   google-chrome, google-chrome@dev, microsoft-edge, microsoft-edge@beta,
+#   microsoft-edge@dev, mullvad-browser, opera, orion, safari, tor-browser,
+#   ungoogled-chromium, vivaldi, waterfox, zen
 default_browser = "safari"
 
 # Custom browsers, keyed by the name rules refer to. Optional.
@@ -30,6 +32,7 @@ bundle_id = "org.mozilla.firefoxdeveloperedition"
 #
 # hosts:              Required, non-empty. Each entry is `host[/path]`:
 #                       - no scheme, no port; the host is case-insensitive
+#                       - IPv6 literals are written in brackets: `[::1]`
 #                       - `github.com` and `github.com/**` match every path
 #                       - `github.com/mk-system` matches only that exact path
 #                       - `github.com/mk-system/**` matches it and everything below
@@ -42,7 +45,7 @@ hosts = ["github.com/mk-system/**"]
 browser = "firefox@developer-edition"
 
 [[rules]]
-hosts = ["localhost", "127.0.0.1"]
+hosts = ["localhost", "127.0.0.1", "[::1]"]
 browser = "firefox@dev"
 
 [[rules]]

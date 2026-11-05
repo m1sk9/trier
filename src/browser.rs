@@ -7,10 +7,15 @@ use crate::config::CustomBrowser;
 
 /// Built-in browsers keyed by Homebrew cask token.
 ///
-/// Only entries whose bundle identifier was verified with
-/// `mdls -name kMDItemCFBundleIdentifier -raw /Applications/<App>.app`
-/// belong here; unverified ids would silently open nothing.
+/// Only entries whose bundle identifier was verified belong here, either with
+/// `mdls -name kMDItemCFBundleIdentifier -raw /Applications/<App>.app` or from
+/// the cask's `uninstall quit:` stanza (Homebrew quits the app by that id, so
+/// it must be exact); unverified ids would silently open nothing.
+/// `firefox@beta` / `firefox@esr` are absent: they install as `Firefox.app`
+/// with the same bundle id as `firefox`.
 pub const BUILTIN: &[(&str, &str)] = &[
+    // Not in `quit:`; matches MAC_BUNDLE_ID in brave-core's BRANDING.
+    ("brave-browser", "com.brave.Browser"),
     ("firefox", "org.mozilla.firefox"),
     (
         "firefox@developer-edition",
@@ -19,9 +24,22 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("firefox@nightly", "org.mozilla.nightly"),
     ("google-chrome", "com.google.Chrome"),
     ("google-chrome@dev", "com.google.Chrome.dev"),
+    ("microsoft-edge", "com.microsoft.edgemac"),
+    ("microsoft-edge@beta", "com.microsoft.edgemac.Beta"),
+    ("microsoft-edge@dev", "com.microsoft.edgemac.Dev"),
+    ("mullvad-browser", "net.mullvad.mullvadbrowser"),
+    ("opera", "com.operasoftware.Opera"),
+    ("orion", "com.kagi.kagimacOS"),
     // Not a cask: ships with macOS.
     ("safari", "com.apple.Safari"),
     ("tor-browser", "org.torproject.torbrowser"),
+    (
+        "ungoogled-chromium",
+        "io.ungoogled-software.ungoogled-chromium",
+    ),
+    ("vivaldi", "com.vivaldi.Vivaldi"),
+    ("waterfox", "net.waterfox.waterfox"),
+    ("zen", "app.zen-browser.zen"),
 ];
 
 /// A browser name usable in `default_browser`, `rules[].browser` and `[browsers]`.
@@ -165,6 +183,14 @@ mod tests {
     #[test]
     fn builtin_table_is_sorted_and_unique() {
         assert!(BUILTIN.windows(2).all(|w| w[0].0 < w[1].0));
+    }
+
+    #[test]
+    fn example_config_lists_every_builtin_name() {
+        let example = include_str!("../config/config.toml.example");
+        for (n, _) in BUILTIN {
+            assert!(example.contains(n), "{n} missing from config.toml.example");
+        }
     }
 
     #[test]
