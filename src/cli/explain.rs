@@ -21,12 +21,9 @@ pub fn run(
     match UrlResolver::new(&config, state_path).resolve(input, err)? {
         Ok(decision) => {
             writeln!(out, "{decision}")?;
-            // An unsupported lookup (off macOS) omits the line rather than
-            // claiming the app is missing.
             match lookup(&decision.bundle_id) {
-                Ok(Some(path)) => writeln!(out, "app:       {}", path.display())?,
-                Ok(None) => writeln!(out, "app:       not installed")?,
-                Err(_) => {}
+                Some(path) => writeln!(out, "app:       {}", path.display())?,
+                None => writeln!(out, "app:       not installed")?,
             }
             Ok(true)
         }
@@ -42,7 +39,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::test_support::{lookup_installed, unsupported_lookup};
+    use crate::test_support::lookup_installed;
 
     fn example_path() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml.example")
@@ -53,7 +50,7 @@ mod tests {
     }
 
     fn explain(url: &str, config: &Path, state: &Path) -> (bool, String, String) {
-        explain_with(url, config, state, &unsupported_lookup)
+        explain_with(url, config, state, &lookup_installed(&[]))
     }
 
     fn explain_with(
@@ -182,7 +179,7 @@ mod tests {
             "https://github.com/mk-system/trier",
             &example_path(),
             no_home,
-            &unsupported_lookup,
+            &lookup_installed(&[]),
             &mut out,
             &mut err,
         )
@@ -202,7 +199,7 @@ mod tests {
             "https://example.com/",
             &config,
             no_home,
-            &unsupported_lookup,
+            &lookup_installed(&[]),
             &mut out,
             &mut err,
         )
@@ -263,11 +260,5 @@ mod tests {
         );
         assert!(ok);
         assert!(out.ends_with("app:       not installed\n"), "{out}");
-    }
-
-    #[test]
-    fn omits_the_app_line_when_lookup_is_unsupported() {
-        let (_, out, _) = explain("https://example.com/", &example_path(), Path::new(NO_STATE));
-        assert!(!out.contains("app:"), "{out}");
     }
 }

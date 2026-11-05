@@ -230,7 +230,5 @@ fn browsers_lists_builtin_and_custom_entries() {
     };
     assert!(row("firefox@dev").contains("custom"), "{out}");
     assert!(row("safari").contains("built-in"), "{out}");
-    if cfg!(target_os = "macos") {
-        assert!(row("safari").trim_end().ends_with("Safari.app"), "{out}");
-    }
+    assert!(row("safari").trim_end().ends_with("Safari.app"), "{out}");
 }

@@ -10,7 +10,7 @@ use crate::paths::PathsError;
 
 /// Opens `url` with the app identified by a bundle id.
 ///
-/// Injected so the loop can be tested without launching browsers;
+/// Injected so tests do not launch browsers;
 /// `main.rs` passes [`crate::macos::open_url_with`].
 pub type Opener<'a> = &'a mut dyn FnMut(&BundleId, &Url) -> Result<(), MacosError>;
 
@@ -76,7 +76,10 @@ mod tests {
         let mut launched = Vec::new();
         let mut opener = |id: &BundleId, url: &Url| {
             if url.host_str() == Some("fail.example") {
-                return Err(MacosError::Unsupported);
+                return Err(MacosError::Spawn {
+                    program: "fake-open".to_owned(),
+                    source: std::io::Error::other("refused"),
+                });
             }
             launched.push(format!("{id} {url}"));
             Ok(())
@@ -140,7 +143,7 @@ mod tests {
             "{err}"
         );
         assert!(
-            err.contains("error: https://fail.example/: not supported"),
+            err.contains("error: https://fail.example/: failed to run fake-open: refused"),
             "{err}"
         );
     }

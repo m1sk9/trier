@@ -24,13 +24,10 @@ pub fn run(
                 Origin::BuiltIn => "built-in",
                 Origin::Custom => "custom",
             };
-            // `-` instead of "not installed" when the lookup is unsupported
-            // (off macOS): that would be a false claim.
-            let app = match lookup(bundle_id) {
-                Ok(Some(path)) => path.display().to_string(),
-                Ok(None) => "not installed".to_owned(),
-                Err(_) => "-".to_owned(),
-            };
+            let app = lookup(bundle_id).map_or_else(
+                || "not installed".to_owned(),
+                |path| path.display().to_string(),
+            );
             [
                 name.to_string(),
                 origin.to_owned(),
@@ -64,7 +61,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::test_support::{lookup_installed, temp_file, unsupported_lookup};
+    use crate::test_support::{lookup_installed, temp_file};
 
     fn browsers(config: &Path, lookup: AppLookup) -> (bool, String, String) {
         let (mut out, mut err) = (Vec::new(), Vec::new());
@@ -95,7 +92,7 @@ mod tests {
 
     #[test]
     fn lists_builtin_and_custom_browsers_sorted_by_name() {
-        let (ok, out, _) = browsers(&config_with_custom("sorted.toml"), &unsupported_lookup);
+        let (ok, out, _) = browsers(&config_with_custom("sorted.toml"), &lookup_installed(&[]));
         assert!(ok);
         let names: Vec<&str> = out
             .lines()
@@ -111,12 +108,13 @@ mod tests {
                 "firefox@dev",
                 "custom",
                 "org.mozilla.firefoxdeveloperedition",
-                "-"
+                "not",
+                "installed"
             ]
         );
         assert_eq!(
             row(&out, "safari"),
-            ["safari", "built-in", "com.apple.Safari", "-"]
+            ["safari", "built-in", "com.apple.Safari", "not", "installed"]
         );
     }
 
@@ -132,7 +130,7 @@ mod tests {
 
     #[test]
     fn columns_are_aligned() {
-        let (_, out, _) = browsers(&config_with_custom("aligned.toml"), &unsupported_lookup);
+        let (_, out, _) = browsers(&config_with_custom("aligned.toml"), &lookup_installed(&[]));
         let origin_column: Vec<usize> = out
             .lines()
             .map(|l| {
@@ -148,7 +146,7 @@ mod tests {
     #[test]
     fn config_errors_are_reported() {
         let config = temp_file("browsers", "invalid.toml", "version = 2\n");
-        let (ok, _, err) = browsers(&config, &unsupported_lookup);
+        let (ok, _, err) = browsers(&config, &lookup_installed(&[]));
         assert!(!ok);
         assert!(err.contains("unsupported config version 2"), "{err}");
     }

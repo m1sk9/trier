@@ -1,6 +1,6 @@
 # main.rs is the binary entrypoint: argument dispatch and process wiring,
-# not unit-testable. The macOS integration modules call AppKit / Launch
-# Services and spawn processes, which the ubuntu coverage job cannot run.
+# not unit-testable. The macOS integration modules launch apps, show alerts
+# and change the system default browser, which tests must not do.
 # Exclude them so coverage reflects the testable logic.
 ignore:
   - "src/main.rs"

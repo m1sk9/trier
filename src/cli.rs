@@ -7,7 +7,6 @@ use url::Url;
 
 use crate::browser::{BrowserRegistry, BundleId};
 use crate::config::{Config, ConfigError};
-use crate::macos::MacosError;
 use crate::paths::PathsError;
 use crate::resolve::{Decision, ResolveError, decide};
 use crate::state::State;
@@ -20,9 +19,9 @@ pub mod open;
 
 /// Finds where the app with a bundle id is installed.
 ///
-/// Injected so the subcommands can be tested off macOS;
+/// Injected so tests do not depend on which apps this machine has;
 /// `main.rs` passes [`crate::macos::app_path_for_bundle_id`].
-pub type AppLookup<'a> = &'a dyn Fn(&BundleId) -> Result<Option<PathBuf>, MacosError>;
+pub type AppLookup<'a> = &'a dyn Fn(&BundleId) -> Option<PathBuf>;
 
 /// Loads the config, writing `error:` lines and returning `None` on failure.
 pub fn load_config(path: &Path, err: &mut dyn Write) -> io::Result<Option<Config>> {

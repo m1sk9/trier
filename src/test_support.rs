@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use crate::browser::BundleId;
-use crate::macos::MacosError;
 
 /// A per-module scratch directory under `target/tmp`.
 pub fn temp_dir(module: &str) -> PathBuf {
@@ -21,18 +20,18 @@ pub fn temp_file(module: &str, name: &str, content: &str) -> PathBuf {
     path
 }
 
-/// An app lookup as it behaves off macOS.
-pub fn unsupported_lookup(_: &BundleId) -> Result<Option<PathBuf>, MacosError> {
-    Err(MacosError::Unsupported)
-}
-
 /// An app lookup where only `installed` is installed, under `/Applications`.
 pub fn lookup_installed(
     installed: &'static [&'static str],
-) -> impl Fn(&BundleId) -> Result<Option<PathBuf>, MacosError> {
+) -> impl Fn(&BundleId) -> Option<PathBuf> {
     move |id| {
-        Ok(installed
+        installed
             .contains(&id.as_str())
-            .then(|| PathBuf::from(format!("/Applications/{id}.app"))))
+            .then(|| PathBuf::from(format!("/Applications/{id}.app")))
     }
+}
+
+/// An app lookup where every app is installed, under `/Applications`.
+pub fn all_installed(id: &BundleId) -> Option<PathBuf> {
+    Some(PathBuf::from(format!("/Applications/{id}.app")))
 }

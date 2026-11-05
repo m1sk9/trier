@@ -44,8 +44,7 @@ pub fn run(
 /// One warning per referenced browser whose app is not installed.
 ///
 /// A config stays valid on a machine that lacks a browser, so this is not an
-/// error. When the lookup fails (unsupported off macOS) nothing is reported:
-/// "not installed" would be a false claim there.
+/// error.
 fn missing_browsers(config: &Config, lookup: AppLookup) -> Vec<String> {
     let mut references: Vec<(&BrowserName, Vec<String>)> = Vec::new();
     let named = config
@@ -72,14 +71,11 @@ fn missing_browsers(config: &Config, lookup: AppLookup) -> Vec<String> {
         let Some(bundle_id) = registry.resolve(name) else {
             continue;
         };
-        match lookup(bundle_id) {
-            Ok(Some(_)) => {}
-            Ok(None) => warnings.push(format!(
+        if lookup(bundle_id).is_none() {
+            warnings.push(format!(
                 "warning: browser `{name}` ({bundle_id}) is not installed (used by {})",
                 locations.join(", ")
-            )),
-            // Off macOS the lookup is unsupported; skip rather than guess.
-            Err(_) => return Vec::new(),
+            ));
         }
     }
     warnings
@@ -113,7 +109,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::test_support::{lookup_installed, unsupported_lookup};
+    use crate::test_support::{all_installed, lookup_installed};
 
     fn example_path() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml.example")
@@ -125,7 +121,7 @@ mod tests {
 
     fn check(path: &Path) -> (bool, String, String) {
         let (mut out, mut err) = (Vec::new(), Vec::new());
-        let ok = run(path, &unsupported_lookup, &mut out, &mut err).unwrap();
+        let ok = run(path, &all_installed, &mut out, &mut err).unwrap();
         (
             ok,
             String::from_utf8(out).unwrap(),
@@ -268,13 +264,6 @@ mod tests {
             &path,
             &lookup_installed(&["org.mozilla.firefox", "com.apple.Safari"]),
         );
-        assert!(!out.contains("warning:"), "{out}");
-    }
-
-    #[test]
-    fn unsupported_lookup_skips_the_installed_check() {
-        let path = write_config("unsupported.toml", REFERENCES);
-        let (_, out) = check_with(&path, &unsupported_lookup);
         assert!(!out.contains("warning:"), "{out}");
     }
 }
