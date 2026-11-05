@@ -168,6 +168,14 @@ mod tests {
         );
     }
 
+    #[test]
+    fn install_io_errors_name_the_skill_file() {
+        let dir = temp_dir("io");
+        std::fs::create_dir_all(dir.join("SKILL.md")).unwrap();
+        let err = install(&dir, true).unwrap_err();
+        assert!(matches!(&err, SkillError::Io { path, .. } if *path == dir.join("SKILL.md")));
+    }
+
     fn frontmatter() -> &'static str {
         SKILL
             .strip_prefix("---\n")

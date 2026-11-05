@@ -252,6 +252,42 @@ mod tests {
         assert_eq!(report.stderr(), "b\n");
     }
 
+    fn scratch(name: &str) -> PathBuf {
+        let dir = crate::test_support::temp_dir(&format!("write-text-{name}"));
+        std::fs::remove_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn write_text_reports_an_existing_file() {
+        let path = scratch("exists").join("f");
+        write_text(&path, "a", false).unwrap();
+        assert!(matches!(
+            write_text(&path, "b", false),
+            Err(WriteError::AlreadyExists)
+        ));
+    }
+
+    #[test]
+    fn write_text_reports_an_uncreatable_parent() {
+        let blocker = scratch("parent").join("file");
+        std::fs::write(&blocker, "").unwrap();
+        assert!(matches!(
+            write_text(&blocker.join("f"), "a", true),
+            Err(WriteError::Io(_))
+        ));
+    }
+
+    #[test]
+    fn write_text_reports_an_unopenable_target() {
+        let dir = scratch("target");
+        assert!(matches!(
+            write_text(&dir, "a", true),
+            Err(WriteError::Io(_))
+        ));
+    }
+
     #[test]
     fn live_report_keeps_nothing() {
         let mut report = Report::live();

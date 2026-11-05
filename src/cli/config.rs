@@ -62,4 +62,11 @@ mod tests {
         init(&path, true).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), EXAMPLE);
     }
+
+    #[test]
+    fn io_errors_name_the_path() {
+        let dir = crate::test_support::temp_dir("init-io");
+        let err = init(&dir, true).unwrap_err();
+        assert!(matches!(&err, InitError::Io { path, .. } if *path == dir));
+    }
 }
