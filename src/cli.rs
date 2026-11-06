@@ -14,6 +14,7 @@ use crate::state::State;
 
 pub mod browsers;
 pub mod check;
+pub mod completions;
 pub mod config;
 pub mod explain;
 pub mod open;

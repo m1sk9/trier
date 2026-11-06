@@ -216,11 +216,20 @@ warning: rules[1] never matches: every host is already matched by rules[0]
 | `register`    | `trier register`                                    | Generate `~/Applications/Trier.app` and make it the default browser.                             |
 | `unregister`  | `trier unregister`                                  | Restore the previous default browser and remove `Trier.app`.                                     |
 | `status`      | `trier status`                                      | Show the config, the bundle, the registered version and the current default browser.             |
+| `completions` | `trier completions fish`                            | Print a shell completion script (`bash`, `zsh`, `fish`, `elvish`).                               |
 | `skill`       | `trier skill`                                       | Install usage notes for LLM coding agents (`--agent claude\|agents`, `--path <DIR>`, `--force`). |
 | `config path` | `trier config path`                                 | Print the config file path in effect.                                                            |
 | `config init` | `trier config init`                                 | Write the example config there (`--force` to overwrite).                                         |
 
 Every command accepts `--config <PATH>`.
+
+### Shell completions
+
+`trier completions <SHELL>` prints a completion script for subcommands and flags. For example, with fish:
+
+```sh
+trier completions fish > ~/.config/fish/completions/trier.fish
+```
 
 ### Skill for LLM coding agents
 
@@ -258,6 +267,10 @@ Run `trier unregister` **before** `brew uninstall trier`, so the previous defaul
 - **`register` says the default is still another browser.** macOS asks for confirmation; once you accept, `trier status` shows `default: trier`. You can also pick Trier under System Settings > Desktop & Dock > Default web browser.
 - **An alert says the config cannot be loaded.** The link still opened in the recorded browser. Fix the config with `trier check`.
 
-## License
+## LICENSE
 
-[MIT](LICENSE)
+trier is published under [MIT License](./LICENSE).
+
+<sub>
+    ® 2026 Sho Sakuma
+</sub>
