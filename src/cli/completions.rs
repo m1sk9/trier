@@ -25,13 +25,7 @@ mod tests {
 
     #[test]
     fn every_shell_gets_a_script_that_names_the_command_and_subcommands() {
-        for shell in [
-            Shell::Bash,
-            Shell::Zsh,
-            Shell::Fish,
-            Shell::Elvish,
-            Shell::PowerShell,
-        ] {
+        for shell in [Shell::Bash, Shell::Zsh, Shell::Fish, Shell::Elvish] {
             let mut report = Report::default();
             run(shell, &mut sample(), &mut report);
             let out = report.stdout();

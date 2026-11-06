@@ -354,7 +354,7 @@ fn skill_rejects_agent_together_with_path() {
 #[test]
 fn completions_cover_every_subcommand_for_every_shell() {
     let home = test_dir("completions");
-    for shell in ["bash", "zsh", "fish", "elvish", "powershell"] {
+    for shell in ["bash", "zsh", "fish", "elvish"] {
         let output = trier(&home)
             .args(["completions", shell])
             .assert()
@@ -386,10 +386,10 @@ fn completions_cover_every_subcommand_for_every_shell() {
 }
 
 #[test]
-fn completions_rejects_an_unknown_shell() {
+fn completions_rejects_shells_trier_does_not_support() {
     let home = test_dir("completions-bad");
     trier(&home)
-        .args(["completions", "tcsh"])
+        .args(["completions", "powershell"])
         .assert()
         .failure();
 }

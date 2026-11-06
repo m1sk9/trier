@@ -45,7 +45,7 @@ enum Command {
     /// Print a shell completion script to stdout.
     Completions {
         /// The shell to generate completions for.
-        shell: Shell,
+        shell: ShellArg,
     },
     /// Install the trier skill (usage notes for LLM coding agents).
     Skill {
@@ -64,6 +64,27 @@ enum Command {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+}
+
+// Not `clap_complete::Shell` itself: it also offers PowerShell, and trier
+// runs on macOS only.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ShellArg {
+    Bash,
+    Zsh,
+    Fish,
+    Elvish,
+}
+
+impl From<ShellArg> for Shell {
+    fn from(arg: ShellArg) -> Self {
+        match arg {
+            ShellArg::Bash => Self::Bash,
+            ShellArg::Zsh => Self::Zsh,
+            ShellArg::Fish => Self::Fish,
+            ShellArg::Elvish => Self::Elvish,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -143,7 +164,7 @@ fn main() -> anyhow::Result<ExitCode> {
             &mut report,
         ),
         Command::Completions { shell } => {
-            cli::completions::run(shell, &mut Args::command(), &mut report);
+            cli::completions::run(shell.into(), &mut Args::command(), &mut report);
             true
         }
         Command::Skill { agent, path, force } => {
