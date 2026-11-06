@@ -350,3 +350,46 @@ fn skill_rejects_agent_together_with_path() {
         .assert()
         .failure();
 }
+
+#[test]
+fn completions_cover_every_subcommand_for_every_shell() {
+    let home = test_dir("completions");
+    for shell in ["bash", "zsh", "fish", "elvish", "powershell"] {
+        let output = trier(&home)
+            .args(["completions", shell])
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+        let out = stdout(&output);
+        for word in [
+            "check",
+            "explain",
+            "open",
+            "browsers",
+            "register",
+            "unregister",
+            "status",
+            "completions",
+            "skill",
+            "config",
+            // fish spells long flags as `-l config`.
+            if shell == "fish" {
+                "-l config"
+            } else {
+                "--config"
+            },
+        ] {
+            assert!(out.contains(word), "{shell} is missing `{word}`");
+        }
+    }
+}
+
+#[test]
+fn completions_rejects_an_unknown_shell() {
+    let home = test_dir("completions-bad");
+    trier(&home)
+        .args(["completions", "tcsh"])
+        .assert()
+        .failure();
+}

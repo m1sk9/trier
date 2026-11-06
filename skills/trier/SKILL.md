@@ -83,6 +83,7 @@ A pattern is `host[/path]`, with no scheme and no port (ports, queries and fragm
 | `trier register` | Make trier the default browser (system change, may show a macOS dialog) |
 | `trier unregister` | Restore the previous default browser; run before uninstalling |
 | `trier status` | Show config, bundle, registration and the current default browser |
+| `trier completions <SHELL>` | Print a shell completion script (bash, zsh, fish, elvish, powershell) |
 | `trier config path` / `config init [--force]` | Print the config path / write an example config |
 
 Every command accepts `--config <PATH>`.

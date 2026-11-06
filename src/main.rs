@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::Context;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 use trier::{cli, handler, macos, paths, register};
 
 #[derive(Debug, Parser)]
@@ -41,6 +42,11 @@ enum Command {
     Unregister,
     /// Show the config, the bundle and whether trier is the default browser.
     Status,
+    /// Print a shell completion script to stdout.
+    Completions {
+        /// The shell to generate completions for.
+        shell: Shell,
+    },
     /// Install the trier skill (usage notes for LLM coding agents).
     Skill {
         /// Whose skills directory to install into.
@@ -136,6 +142,10 @@ fn main() -> anyhow::Result<ExitCode> {
             },
             &mut report,
         ),
+        Command::Completions { shell } => {
+            cli::completions::run(shell, &mut Args::command(), &mut report);
+            true
+        }
         Command::Skill { agent, path, force } => {
             let dir = match path {
                 Some(dir) => dir,
