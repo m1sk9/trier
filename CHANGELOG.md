@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1](https://github.com/m1sk9/trier/compare/v0.2.0...v0.2.1) (2026-11-06)
+
+
+### Miscellaneous
+
+* **deps:** update dependency macos to v26 ([#21](https://github.com/m1sk9/trier/issues/21)) ([d6699fb](https://github.com/m1sk9/trier/commit/d6699fbeeaa7c9d7d916c35d3c811ad7b2c2341f))
+* **deps:** update dependency ubuntu to v26 ([#22](https://github.com/m1sk9/trier/issues/22)) ([89ac603](https://github.com/m1sk9/trier/commit/89ac603d2ec1666e19a124d672d514d8933f10ea))
+* **deps:** update rust crate toml to v1.2.1 ([#24](https://github.com/m1sk9/trier/issues/24)) ([35e3abf](https://github.com/m1sk9/trier/commit/35e3abf5bb50c931d9548eac13b10bb51605be54))
+
 ## [0.2.0](https://github.com/m1sk9/trier/compare/v0.1.1...v0.2.0) (2026-11-06)
 
 
