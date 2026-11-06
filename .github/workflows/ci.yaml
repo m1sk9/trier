@@ -10,7 +10,7 @@ on:
 # crate refuses to compile elsewhere.
 jobs:
   check:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout branch
         uses: actions/checkout@v7
@@ -35,7 +35,7 @@ jobs:
         run: cargo test --verbose
 
   coverage:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -70,7 +70,7 @@ jobs:
 
   build:
     name: build (aarch64-apple-darwin)
-    runs-on: macos-15
+    runs-on: macos-26
     needs: check
     steps:
       - name: Checkout
