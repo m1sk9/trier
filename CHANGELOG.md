@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0](https://github.com/m1sk9/trier/compare/v0.1.1...v0.2.0) (2026-11-06)
+
+
+### Features
+
+* add `trier completions` to print shell completion scripts ([#20](https://github.com/m1sk9/trier/issues/20)) ([cd6d1d4](https://github.com/m1sk9/trier/commit/cd6d1d40be02571efca832d8e9ae9558ea1124d2))
+* add `trier skill` to install usage notes for LLM coding agents ([96d420e](https://github.com/m1sk9/trier/commit/96d420ed62513fe01b9571f28f32235b6aa3f410))
+
 ## [0.1.1](https://github.com/m1sk9/trier/compare/v0.1.0...v0.1.1) (2026-11-05)
 
 
