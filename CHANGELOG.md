@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.1](https://github.com/m1sk9/trier/compare/v0.2.0...v0.2.1) (2026-11-25)
+
+
+### Miscellaneous
+
+* **deps:** update dependency macos to v26 ([#21](https://github.com/m1sk9/trier/issues/21)) ([d6699fb](https://github.com/m1sk9/trier/commit/d6699fbeeaa7c9d7d916c35d3c811ad7b2c2341f))
+* **deps:** update dependency ubuntu to v26 ([#22](https://github.com/m1sk9/trier/issues/22)) ([89ac603](https://github.com/m1sk9/trier/commit/89ac603d2ec1666e19a124d672d514d8933f10ea))
+* **deps:** update rust crate anyhow to v1.0.105 ([#33](https://github.com/m1sk9/trier/issues/33)) ([a8a192c](https://github.com/m1sk9/trier/commit/a8a192c44d3aed5603ff8c4e377d647897562ce3))
+* **deps:** update rust crate clap to v4.6.10 ([#34](https://github.com/m1sk9/trier/issues/34)) ([51d32ac](https://github.com/m1sk9/trier/commit/51d32ac263b64a51405af6223bd27565dcd94cd1))
+* **deps:** update rust crate clap to v4.6.8 ([#26](https://github.com/m1sk9/trier/issues/26)) ([13c51ef](https://github.com/m1sk9/trier/commit/13c51ef92f2fc7902d6243254a8a1855484ac10a))
+* **deps:** update rust crate clap to v4.6.9 ([#29](https://github.com/m1sk9/trier/issues/29)) ([b846fe8](https://github.com/m1sk9/trier/commit/b846fe8dcc83e7cc7ae62f5335a4a565f211083b))
+* **deps:** update rust crate clap_complete to v4.6.12 ([#27](https://github.com/m1sk9/trier/issues/27)) ([21d358c](https://github.com/m1sk9/trier/commit/21d358cb2f22915265b421d1914725bee0cdf1f8))
+* **deps:** update rust crate env_logger to v0.11.12 ([#30](https://github.com/m1sk9/trier/issues/30)) ([77087da](https://github.com/m1sk9/trier/commit/77087da11fa6c9d4dfec0a5efa558a289c81bc8c))
+* **deps:** update rust crate toml to v1.2.1 ([#24](https://github.com/m1sk9/trier/issues/24)) ([35e3abf](https://github.com/m1sk9/trier/commit/35e3abf5bb50c931d9548eac13b10bb51605be54))
+* **deps:** update rust crate toml to v1.2.2 ([#32](https://github.com/m1sk9/trier/issues/32)) ([8b00036](https://github.com/m1sk9/trier/commit/8b00036448763ef6deeffb36fc3558e4524edb0b))
+* **deps:** update rust crate toml to v1.2.3 ([#35](https://github.com/m1sk9/trier/issues/35)) ([810df1a](https://github.com/m1sk9/trier/commit/810df1a83f8cbe92aa086d38e5d4380685f08b93))
+* **deps:** update rust crate url to v2.5.9 ([#31](https://github.com/m1sk9/trier/issues/31)) ([cd357d7](https://github.com/m1sk9/trier/commit/cd357d740c2f296cdd4b0bee073593f332fae4d9))
+* **deps:** update taiki-e/install-action digest to ab49d3c ([#25](https://github.com/m1sk9/trier/issues/25)) ([b01c988](https://github.com/m1sk9/trier/commit/b01c988f772868ba041342ab9d8a40231506f6c2))
+
 ## [0.2.0](https://github.com/m1sk9/trier/compare/v0.1.1...v0.2.0) (2026-11-06)
 
 
